@@ -3,3 +3,6 @@
 # Elide supplies a `cc` compatibility shim to child scripts. Rust needs the host linker.
 [target.'cfg(target_os = "linux")']
 linker = "gcc"
+
+[target.'cfg(target_os = "macos")']
+linker = "/usr/bin/cc"

@@ -58,6 +58,9 @@ fn provider(directory: &Path, variant: &str) -> PathBuf {
     if cfg!(target_os = "linux") {
         rustc.arg("-Clinker=gcc");
     }
+    if cfg!(target_os = "macos") {
+        rustc.arg("-Clinker=/usr/bin/cc");
+    }
     let result = rustc
         .env(
             "SMH_TEST_ABI_RS",

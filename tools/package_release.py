@@ -24,7 +24,7 @@ def main():
     archives = []
     for kind, files in (
         ("sdk", sdk),
-        ("linux-amd64", [ROOT / "build/smh", ROOT / "build/smh-bootstrap"]),
+        ("linux-amd64", sdk + [ROOT / "build/smh", ROOT / "build/smh-bootstrap"]),
     ):
         archive = output / f"smh-{version}-{kind}.zip"
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:

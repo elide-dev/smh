@@ -3,6 +3,6 @@
 version = 1
 
 [[annotations]]
-path = [".release-please-manifest.json", "release-please-config.json", "Cargo.lock", "quality-policy.json", "examples/*.json", "abi/generated/**", "tests/fuzz/corpus/**", "tests/miri-control/Cargo.lock"]
+path = ["CHANGELOG.md", ".release-please-manifest.json", "release-please-config.json", "Cargo.lock", "quality-policy.json", "examples/*.json", "abi/generated/**", "tests/fuzz/corpus/**", "tests/miri-control/Cargo.lock"]
 SPDX-FileCopyrightText = "2026 SMH contributors"
 SPDX-License-Identifier = "Apache-2.0 OR MIT"

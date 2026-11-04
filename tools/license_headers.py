@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SUFFIXES = {".java", ".rs", ".py", ".pkl", ".toml", ".yml", ".yaml", ".md", ".seam"}
-SKIP = {".git", ".dev", ".elide", "build", "target", "__pycache__", ".venv"}
+SKIP = {"CHANGELOG.md", ".git", ".dev", ".elide", "build", "target", "__pycache__", ".venv"}
 COPYRIGHT = "SPDX-FileCopyrightText: 2026 SMH contributors"
 LICENSE = "SPDX-License-Identifier: Apache-2.0 OR MIT"
 

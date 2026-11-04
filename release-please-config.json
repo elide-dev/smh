@@ -9,6 +9,14 @@
         {
           "type": "generic",
           "path": "elide.pkl"
+        },
+        {
+          "type": "generic",
+          "path": "src/main/java/dev/elide/smh/cli/Main.java"
+        },
+        {
+          "type": "generic",
+          "path": "src/test/java/dev/elide/smh/cli/CliTest.java"
         }
       ]
     }

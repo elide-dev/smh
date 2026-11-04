@@ -13,6 +13,9 @@ name: Release artifacts
         required: true
 permissions:
   contents: read
+concurrency:
+  group: artifacts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   linux:
     runs-on: ubuntu-24.04

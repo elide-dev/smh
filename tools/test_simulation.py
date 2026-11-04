@@ -12,9 +12,9 @@ import subprocess
 from pathlib import Path
 
 from qualify_compiler import sha256, tool_identity
-from verification import require
 
 from build import ROOT, build
+from verification import require
 
 
 def execute(command, log):

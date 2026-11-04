@@ -10,9 +10,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from verification import require
-
 from build import ROOT, build, run
+from verification import require
 
 os.chdir(ROOT)
 build()

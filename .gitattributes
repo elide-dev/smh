@@ -1,3 +1,4 @@
 # SPDX-FileCopyrightText: 2026 SMH contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
+* text=auto eol=lf
 tests/fuzz/corpus/** binary

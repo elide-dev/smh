@@ -9,9 +9,8 @@ import os
 import shutil
 import subprocess
 
-from verification import require
-
 from build import ROOT
+from verification import require
 
 os.chdir(ROOT)
 parser = argparse.ArgumentParser()

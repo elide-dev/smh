@@ -29,6 +29,7 @@ jobs:
       - run: python tools/format_java.py
       - run: ruff check tools tests/python
       - run: ruff format --check tools tests/python
+      - run: rustup component add --toolchain 1.91.1 rustfmt clippy
       - run: cargo fmt --all --check
       - run: rustfmt --edition 2024 --check tests/ffi/provider.rs tests/miri-control/src/main.rs
       - run: cargo clippy --locked --all-targets -- -D warnings

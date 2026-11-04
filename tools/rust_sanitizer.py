@@ -27,6 +27,25 @@ def verify_result(returncode, output, expected_diagnostic=None):
         raise ValueError("Instrumented clean command failed")
 
 
+def verify_junit(suite):
+    """Nextest omits optional skipped counts when zero; never ignore skipped cases."""
+    cases = suite.findall(".//testcase")
+    if (
+        len(cases) < 11
+        or int(suite.get("tests", "-1")) != len(cases)
+        or any(int(suite.get(key, "-1")) != 0 for key in ("failures", "errors"))
+        or any(
+            int(node.get(key, "0")) != 0
+            for node in [suite, *suite.findall(".//testsuite")]
+            for key in ("failures", "errors", "skipped", "disabled")
+        )
+        or any(
+            case.find(key) is not None for case in cases for key in ("failure", "error", "skipped")
+        )
+    ):
+        raise ValueError("Incomplete or failing sanitizer test inventory")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
@@ -143,11 +162,7 @@ def main():
             shutil.copy2(junit, output / "junit.xml")
     if not junit.is_file():
         raise ValueError("Missing sanitizer JUnit report")
-    suite = ET.parse(junit).getroot()
-    if len(suite.findall(".//testcase")) < 11 or any(
-        int(suite.get(key, "-1")) != 0 for key in ("failures", "errors", "skipped")
-    ):
-        raise ValueError("Incomplete or failing sanitizer test inventory")
+    verify_junit(ET.parse(junit).getroot())
     evidence = {
         "passed": True,
         "rustc": identity,

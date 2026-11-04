@@ -55,6 +55,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+        with:
+          extra-tools: cargo:cargo-llvm-cov cargo:cargo-nextest
       - name: Test loader lifecycle and enforce Rust line coverage
         run: mise run coverage-rust
       - name: Upload Rust coverage separately
@@ -124,6 +126,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+        with:
+          extra-tools: cargo:cargo-nextest
       - name: Prove FFI memory-error detection and run instrumented Rust tests
         run: python tools/rust_sanitizer.py --output build/rust-asan/ci
       - name: Preserve sanitizer evidence including failed controls

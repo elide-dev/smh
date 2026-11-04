@@ -72,7 +72,8 @@ GitHub Releases provide `smh-VERSION-sdk.zip` (Java 25 CLI, runtime/API JAR,
 and runtime dependencies), `smh-VERSION-linux-amd64.zip` (SDK plus native CLI and Rust
 bootstrap), and `SHA256SUMS`. After extracting the SDK, run
 `java -cp 'smh.jar:lib/*' dev.elide.smh.cli.Main --help`; use `;` instead of `:`
-on Windows. Native benchmark compilation still requires a compatible GraalVM.
+on Windows. Pass `--home /path/to/extracted/sdk` to `smh build`.
+Native benchmark compilation still requires a compatible GraalVM.
 The initial release is experimental; consult the assurance ledger before making
 performance claims. Other native distribution targets remain on the roadmap.
 

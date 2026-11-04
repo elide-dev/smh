@@ -18,7 +18,7 @@ hardware wall time.
 
 ## Region state machine
 
-The logical sequence is discovery → calibration → trial setup → warmup → measured
+The logical sequence is discovery → trial setup → calibration → warmup → measured
 iterations → trial teardown → analysis/reporting. PGO training is a separate run
 purpose. For each iteration, iteration setup precedes region entry; region exit
 precedes iteration teardown. Only operations deliberately included by the selected
@@ -40,7 +40,13 @@ timing policy. Invocation-fixture benchmarks reject batches larger than one
 before trial setup. Custom adapters must accurately declare invocation fixtures
 through `hasInvocationFixtures()`.
 
-Batch selection is currently explicit, not automatically calibrated. Increasing
+Optional `batchCalibration` selects a batch before warmup. It doubles from one
+up to explicit batch/attempt limits, retaining every probe. Every probe in an
+attempt must reach the target duration; exhaustion is reported rather than
+hidden. Iteration fixtures surround probes outside the clock pair. Calibration
+is incompatible with invocation fixtures, simulation, or an explicit batch.
+This measures probe duration, not timer resolution or empty-region overhead;
+it neither subtracts overhead nor detects JIT quiescence. Increasing
 batch size can change cache, allocation, and optimization behavior, so reports
 with different batch sizes should remain distinguishable. Compiler/CPU border
 qualification of the new batch path remains open; ordinary results retain

@@ -207,3 +207,13 @@ References: [Gold criteria](https://www.bestpractices.dev/en/criteria/2),
 [Scorecard checks](https://github.com/ossf/scorecard/blob/main/docs/checks.md),
 [toolchain sanitizer contracts](https://github.com/elide-dev/toolchain#sanitizers),
 [Callgrind manual](https://valgrind.org/docs/manual/cl-manual.html).
+
+## Automatic batch selection
+
+`mise run test-calibration` builds frozen monolithic and layered O2 fixtures.
+Local Linux amd64 evidence in `build/calibration-tests/20261104T232406043959Z`
+passes raw-probe, work-count, stopping-policy, and score-arithmetic checks.
+Some phases reach their configured sample limit; these results remain visible
+and are not relabeled stable. The kernel gate includes the calibrator and its
+policy. Timer resolution, empty-region overhead, and CPU/compiler qualification
+remain separate obligations.

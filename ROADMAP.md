@@ -53,9 +53,12 @@ measurement accuracy or platform support.
 - [x] F01-02: Inject wall clocks for deterministic measurement tests, without a fake production clock.
   Evidence: package-private clock seam and independent `RunnerTest` traces; simulator seam tracked in M3.
 - [ ] F01-03: Calibrate timer resolution, empty-region overhead, and batch sizes; report uncertainty.
+  Bounded automatic batch selection is implemented and tested with retained probes,
+  explicit exhaustion, and monolithic/layered O2 native evidence. Timer resolution,
+  empty-region characterization, and uncertainty qualification remain open.
 - [x] F01-04: Time batches instead of taking two clock readings for every tiny invocation.
   Explicit wallBatchSize uses one clock pair per batch, counts all operations, and records
-  the policy. Deterministic traces cover all three modes. Automatic calibration is F01-03;
+  the policy. Deterministic traces cover all three modes. Automatic batch calibration is available (remaining calibration work is F01-03);
   invocation-fixture batches are rejected, and compiler/CPU qualification remains M2.
 - [ ] F01-05: Give invocation-fixture benchmarks an explicit measurement policy and overhead qualification.
 - [ ] F01-06: Make region entry/exit balanced under every benchmark/fixture/observer failure.

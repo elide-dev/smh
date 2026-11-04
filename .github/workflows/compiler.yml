@@ -1,0 +1,85 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Concrete compiler qualification
+'on':
+  workflow_dispatch:
+  schedule:
+    - cron: '31 7 * * 4'
+permissions:
+  contents: read
+concurrency:
+  group: compiler-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  simulation:
+    name: Callgrind regions / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1, 2026-11-04
+        with:
+          distribution: graalvm
+          version: '25.0'
+          github-token: ${{ github.token }}
+      - name: Install host simulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends valgrind
+      - name: Qualify deterministic work, fixture exclusion, layers, and broken boundaries
+        run: python tools/test_simulation.py --output build/simulation-tests/ci
+      - name: Preserve real simulator evidence and failures
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: simulation-${{ matrix.os }}
+          path: build/simulation-tests/ci/
+          compression-level: 6
+          retention-days: 14
+
+  sinks:
+    name: Sinks and scheduled calls / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1, 2026-11-04
+        with:
+          distribution: graalvm
+          version: '25.0'
+          github-token: ${{ github.token }}
+          native-image-job-reports: 'false'
+      # Probe the resolved 25.0 compiler; its actual version and implementation hashes
+      # are recorded. A failure or a missing intrinsic fails this qualification.
+      - name: Check pinned generated ABI
+        run: mise run check-abi
+      - name: Qualify O1/O2/O3, PGO, and a deliberately disabled intrinsic
+        run: python tools/qualify_compiler.py --levels 1,2,3 --with-pgo --output build/qualification/ci
+      - name: Preserve passing and failing compiler evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compiler-${{ matrix.os }}
+          path: build/qualification/ci/
+          compression-level: 6
+          retention-days: 14

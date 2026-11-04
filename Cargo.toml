@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "smh-bootstrap"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/elide-dev/smh"
+
+[dependencies]
+libloading = "0.8.9"

@@ -1,0 +1,31 @@
+{
+  "include": "ArraySum",
+  "batchCalibration": {
+    "targetNanos": 100000,
+    "maximumBatchSize": 65536,
+    "maximumAttempts": 17,
+    "samplesPerAttempt": 3
+  },
+  "warmupStability": {
+    "minimumSamples": 8,
+    "maximumSamples": 24,
+    "windowSize": 4,
+    "consecutiveWindows": 2,
+    "maximumRelativeDeviation": 0.05,
+    "maximumRelativeDrift": 0.03,
+    "maximumRelativeSlope": 0.02
+  },
+  "measurementStability": {
+    "minimumSamples": 8,
+    "maximumSamples": 24,
+    "windowSize": 4,
+    "consecutiveWindows": 2,
+    "maximumRelativeDeviation": 0.05,
+    "maximumRelativeDrift": 0.03,
+    "maximumRelativeSlope": 0.02
+  },
+  "warmupNanos": 20000000,
+  "measurementNanos": 20000000,
+  "params": { "size": ["16", "1024"] },
+  "output": "build/calibrated-results.json"
+}

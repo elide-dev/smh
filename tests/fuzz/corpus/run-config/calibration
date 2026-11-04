@@ -1,0 +1,1 @@
+{"batchCalibration":{"targetNanos":100000,"maximumBatchSize":65536,"maximumAttempts":17,"samplesPerAttempt":3}}

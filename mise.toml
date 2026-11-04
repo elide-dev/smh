@@ -1,0 +1,86 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[tools]
+"github:elide-dev/elide" = "1.6.2+20261103"
+rust = "1.91.1"
+actionlint = "1.7.12"
+ruff = "0.17.3"
+google-java-format = "1.37.0"
+"cargo:cargo-llvm-cov" = "0.8.6"
+"cargo:cargo-nextest" = "0.9.115"
+
+[tasks.build]
+run = "elide run assemble"
+
+[tasks.test]
+run = "elide run check"
+
+[tasks.native]
+run = "elide run native"
+
+[tasks.test-native]
+depends = ["native"]
+run = "python3 tools/test_native.py"
+
+[tasks.test-pgo]
+depends = ["native"]
+run = "python3 tools/test_native.py --with-pgo"
+
+[tasks."test-jvm"]
+run = "elide test"
+
+[tasks."coverage-kernel"]
+depends = ["test-jvm"]
+run = "python3 tools/coverage_gate.py .dev/reports/coverage/jvm/jvm-test/jvm-test.xml --kernel-only"
+
+[tasks."coverage"]
+depends = ["test-jvm"]
+run = "python3 tools/coverage_gate.py .dev/reports/coverage/jvm/jvm-test/jvm-test.xml"
+
+[tasks.lint]
+run = ["actionlint", "python3 tools/license_headers.py", "python3 tools/format_java.py", "ruff check tools tests/python", "ruff format --check tools tests/python", "cargo fmt --all --check", "rustfmt --edition 2024 --check tests/ffi/provider.rs tests/miri-control/src/main.rs", "cargo clippy --locked --all-targets -- -D warnings"]
+
+[tasks."generate-abi"]
+run = "python3 tools/myna_bindings.py"
+
+[tasks."check-abi"]
+run = "python3 tools/myna_bindings.py --check"
+
+[tasks."test-tools"]
+run = "python3 -m unittest discover -s tests/python -v"
+
+[tasks."coverage-rust"]
+run = "python3 tools/rust_coverage.py"
+
+[tasks."coverage-rust-branch"]
+run = "python3 tools/rust_coverage.py --branch"
+
+[tasks."check-abi-lowering"]
+run = "python3 tools/verify_abi.py"
+
+[tasks."qualify-compiler"]
+run = "python3 tools/qualify_compiler.py --levels 1,2,3"
+
+[tasks."qualify-pgo"]
+run = "python3 tools/qualify_compiler.py --levels 1,2,3 --with-pgo"
+
+[tasks."test-simulation"]
+run = "python3 tools/test_simulation.py"
+
+[tasks."test-portable"]
+run = ["python3 tools/test_portable.py prepare", "python3 tools/test_portable.py run"]
+
+[tasks."test-rust-asan"]
+run = "python3 tools/rust_sanitizer.py"
+
+[tasks."test-miri"]
+run = "python3 tools/rust_miri.py"
+
+[tasks."fuzz-callgrind"]
+run = "python3 tools/fuzz_callgrind.py"
+
+[tasks."fuzz-run-config"]
+run = "python3 tools/fuzz_callgrind.py --target run-config"
+
+[tasks."test-calibration"]
+run = "python3 tools/test_calibration.py"

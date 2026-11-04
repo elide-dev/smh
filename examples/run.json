@@ -1,0 +1,9 @@
+{
+  "include": "ArraySum",
+  "warmupIterations": 1,
+  "measurementIterations": 3,
+  "warmupNanos": 20000000,
+  "measurementNanos": 20000000,
+  "params": { "size": ["16", "1024"] },
+  "output": "build/results.json"
+}

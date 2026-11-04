@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# This ABI intentionally uses only i32, i64, and opaque pointers. No optimizer facts
+# are inferred about SVM transitions, callbacks, exceptions, or heap effects.
+module smh abi=1 target=x86_64-unknown-linux-gnu java_package=dev.elide.smh.generated.nativeapi java_class=SmhNative
+import createIsolate symbol=graal_create_isolate return=i32 error=no_failure
+  param parameters type=ptr<void> nullable=true ownership=borrowed access=read
+  param isolate type=ptr<ptr<void>> nullable=false ownership=borrowed access=write
+  param thread type=ptr<ptr<void>> nullable=false ownership=borrowed access=write
+end
+import tearDown symbol=graal_tear_down_isolate return=i32 error=no_failure
+  param thread type=isolate_thread
+end
+export abiTag symbol=smh_abi_tag return=i64 java=dev.elide.smh.generated.Main.abiTag isolate=thread error=abort
+  param index type=i32
+end
+export run symbol=smh_run return=i32 java=dev.elide.smh.generated.Main.nativeRun isolate=thread error=integer_sentinel sentinel=1
+  param config type=ptr<u8> nullable=false ownership=borrowed access=read
+end

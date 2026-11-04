@@ -1,0 +1,1 @@
+{"warmupStability": {"minimumSamples": 4, "maximumSamples": 8, "windowSize": 2, "consecutiveWindows": 2, "maximumRelativeDeviation": 1e309, "maximumRelativeDrift": 0.01, "maximumRelativeSlope": 0.03}}

@@ -1,0 +1,1 @@
+{"include":".*","wallBatchSize":64,"warmupIterations":0,"measurementIterations":3,"warmupNanos":1,"measurementNanos":9223372036854775807,"modes":["AverageTime","Throughput"],"params":{"size":["16","1024"]},"output":"results.json"}

@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Setup SMH tools
+description: Install the pinned Elide runtime, JVM, Python, Rust, and workflow linter
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      with:
+        python-version: '3.13'
+    - name: Setup JVM
+      uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      with:
+        distribution: temurin
+        java-version: '25'
+    - name: Setup Elide
+      uses: elide-dev/setup-elide@10fbf30cebffd3538c428369950dc2094137f02b # main, 2026-11-04
+      with:
+        version: '1.6.2+20261103'
+        telemetry: 'false'
+    - name: Setup remaining mise tools
+      uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      with:
+        version: '2026.10.25'
+        install_args: rust actionlint ruff google-java-format cargo:cargo-llvm-cov cargo:cargo-nextest
+        add_shims_to_path: 'false'
+        cache_key_prefix: smh-${{ runner.os }}-${{ runner.arch }}

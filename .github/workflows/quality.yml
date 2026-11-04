@@ -1,0 +1,243 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Quality
+'on':
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: actionlint
+      - run: python tools/license_headers.py
+      - run: python tools/format_java.py
+      - run: ruff check tools tests/python
+      - run: ruff format --check tools tests/python
+      - run: cargo fmt --all --check
+      - run: rustfmt --edition 2024 --check tests/ffi/provider.rs tests/miri-control/src/main.rs
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: python tools/myna_bindings.py --check
+      - run: python -m unittest discover -s tests/python -v
+
+  rust:
+    name: Rust coverage / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        if: runner.os == 'Linux'
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Test loader lifecycle and enforce Rust line coverage
+        run: mise run coverage-rust
+      - name: Upload Rust coverage separately
+        if: ${{ !cancelled() && hashFiles('build/reports/rust.lcov') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          plugins: noop
+          files: build/reports/rust.lcov
+          disable_search: true
+          flags: rust-${{ matrix.os }}
+          fail_ci_if_error: true
+      - name: Preserve Rust evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-reports-${{ matrix.os }}
+          path: build/reports/
+          retention-days: 14
+      - name: Upload Rust JUnit results
+        if: ${{ !cancelled() && hashFiles('build/reports/rust-stable.junit.xml') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          report_type: test_results
+          use_oidc: true
+          plugins: noop
+          files: build/reports/rust-stable.junit.xml
+          disable_search: true
+          flags: rust-${{ matrix.os }}
+          fail_ci_if_error: true
+      - name: Measure and gate nightly Rust branches independently
+        run: mise run coverage-rust-branch
+      - name: Upload nightly branch profile
+        if: ${{ !cancelled() && hashFiles('build/reports/rust-branch.lcov') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          plugins: noop
+          files: build/reports/rust-branch.lcov
+          disable_search: true
+          flags: rust-branch-${{ matrix.os }}
+          fail_ci_if_error: true
+      - name: Preserve branch coverage evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-branch-reports-${{ matrix.os }}
+          path: build/reports/
+          retention-days: 14
+
+  rust-asan:
+    name: Rust AddressSanitizer / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Prove FFI memory-error detection and run instrumented Rust tests
+        run: python tools/rust_sanitizer.py --output build/rust-asan/ci
+      - name: Preserve sanitizer evidence including failed controls
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-asan-${{ matrix.os }}
+          path: build/rust-asan/
+          retention-days: 14
+      - name: Upload sanitizer JUnit results
+        if: ${{ !cancelled() && hashFiles('build/rust-asan/ci/junit.xml') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          report_type: test_results
+          use_oidc: true
+          plugins: noop
+          files: build/rust-asan/ci/junit.xml
+          disable_search: true
+          flags: rust-asan-${{ matrix.os }}
+          fail_ci_if_error: true
+
+  miri:
+    name: Miri / ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Interpret lifecycle tests with strict provenance and both borrow models
+        run: python tools/rust_miri.py --target ${{ matrix.target }} --output build/miri/ci
+      - name: Preserve Miri evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: miri-${{ matrix.target }}
+          path: build/miri/
+          retention-days: 14
+      - name: Upload Miri JUnit results
+        if: ${{ !cancelled() && hashFiles('build/miri/ci/junit.xml') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          report_type: test_results
+          use_oidc: true
+          plugins: noop
+          files: build/miri/ci/junit.xml
+          disable_search: true
+          flags: miri-${{ matrix.target }}
+          fail_ci_if_error: true
+
+  jvm:
+    name: JVM / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        if: runner.os == 'Linux'
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Build and exercise JVM behavior
+        run: elide test
+      - name: Enforce the mathematical kernel milestone
+        run: python tools/coverage_gate.py .dev/reports/coverage/jvm/jvm-test/jvm-test.xml --kernel-only
+      - name: Enforce final production coverage targets
+        run: python tools/coverage_gate.py .dev/reports/coverage/jvm/jvm-test/jvm-test.xml
+      - name: Upload coverage
+        if: ${{ !cancelled() && hashFiles('.dev/reports/coverage/jvm/jvm-test/jvm-test.xml') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          plugins: noop
+          files: .dev/reports/coverage/jvm/jvm-test/jvm-test.xml
+          disable_search: true
+          flags: jvm-${{ matrix.os }}
+          fail_ci_if_error: true
+      - name: Upload JUnit results
+        if: ${{ !cancelled() && hashFiles('.dev/reports/tests/jvm/test/TEST-*.xml') != '' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          report_type: test_results
+          use_oidc: true
+          plugins: noop
+          directory: .dev/reports/tests/jvm/test
+          flags: jvm-${{ matrix.os }}
+          fail_ci_if_error: true
+      - name: Preserve evidence, including failed gates
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: reports-${{ matrix.os }}
+          include-hidden-files: true
+          path: |
+            .dev/reports/
+            build/reports/
+          retention-days: 14

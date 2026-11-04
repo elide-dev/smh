@@ -1,0 +1,9 @@
+{
+  "home": "../build",
+  "sources": ["src"],
+  "output": "../build/simulation",
+  "optimization": "2",
+  "pgo": "off",
+  "layers": true,
+  "nativeArgs": ["--parallelism=4", "-J-Xmx4g", "-g", "-H:-DeleteLocalSymbols", "-march=compatibility"]
+}

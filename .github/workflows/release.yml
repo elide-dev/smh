@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Release
+'on':
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        id: release
+      # GITHUB_TOKEN-created PRs do not trigger pull_request workflows. Explicit
+      # dispatch keeps validation working without a long-lived personal token.
+      - name: Validate release PR
+        if: steps.release.outputs.pr != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+        run: |
+          ref=$(jq -r '.headBranchName' <<< "$RELEASE_PR")
+          test -n "$ref" && test "$ref" != null
+          gh workflow run quality.yml --ref "$ref"
+          gh workflow run portability.yml --ref "$ref"
+          gh workflow run security.yml --ref "$ref"
+          gh workflow run artifacts.yml --ref "$ref"
+
+  assets:
+    needs: release
+    if: needs.release.outputs.created == 'true'
+    uses: ./.github/workflows/artifacts.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+    permissions:
+      contents: write

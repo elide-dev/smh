@@ -1,0 +1,9 @@
+{
+  "home": "../build",
+  "sources": ["src"],
+  "output": "../build/example",
+  "optimization": "2",
+  "pgo": "off",
+  "layers": true,
+  "nativeArgs": ["--parallelism=4", "-J-Xmx4g"]
+}

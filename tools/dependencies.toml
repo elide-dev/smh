@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[myna]
+version = "0.7.0"
+revision = "00b692ddd9a1e44cc0acbe0550c88f7621de365a"
+archive_sha256 = "834080ab9e438dd14b5b670ee9a529064130acd51e73ec5ed0d856f7741a307a"
+
+[rust_coverage]
+nightly = "nightly-2026-10-09"
+
+[rust_sanitizer]
+nightly = "nightly-2026-10-09"
+
+[rust_miri]
+nightly = "nightly-2026-10-09"
+
+[jazzer]
+version = "0.30.0"
+jar_sha256 = "8bdeac017bcd3d9473c9772fac62111c4df830188571def1d001a1b743a62b2f"
+api_sha256 = "d36a725cfedcb7f3590206866cc2836f84d12afccf7c98912f5c720e4d2208d7"

@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Native toolchain controls
+'on':
+  schedule:
+    - cron: '17 6 * * 3'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  abi-lowering:
+    name: Six-target integer/pointer ABI lowering
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - uses: elide-dev/toolchain/action@5622e3ba4474e51eba8afe5f11dfd011904c9265 # main, 2026-11-04
+        with:
+          version: '2026.11.1'
+          target: x86_64-unknown-linux-gnu
+      - run: python tools/verify_abi.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: abi-lowering
+          path: build/abi-lowering/
+          retention-days: 14
+
+  sanitizer-controls:
+    name: Known-bug toolchain controls / ${{ matrix.sanitizer }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [asan, tsan, msan, ubsan]
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: elide-dev/toolchain/action@5622e3ba4474e51eba8afe5f11dfd011904c9265 # main, 2026-11-04
+        with:
+          version: '2026.11.1'
+          target: x86_64-unknown-linux-gnu
+          sanitizer: ${{ matrix.sanitizer }}
+      - name: Verify clean programs and deliberate sanitizer violations
+        run: elide-toolchain doctor --sanitizers
+      # This validates the installed instrumentor. SMH's own instrumented FFI/runtime
+      # suites remain open in ROADMAP.md; this job is not evidence about the SVM heap.

@@ -1,7 +1,12 @@
+<!-- SPDX-FileCopyrightText: 2026 SMH contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 OR MIT -->
 
 ## `smh`
 
 > **S**ubstrateVM **M**icrobenchmark **H**arness
+
+Repository: [elide-dev/smh](https://github.com/elide-dev/smh). Licensed under
+[Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option.
 
 `smh` enables (relatively) painless benchmarking as a (roughly) drop-in replacement for [JMH](https://github.com/openjdk/jmh) when Native Image is your intended target.
 
@@ -39,13 +44,48 @@ processor generates direct Java calls, parameter assignments, fixture calls, and
 a closed-world benchmark registry before Native Image runs. Benchmark discovery
 and invocation do not require reflection in the native executable.
 
-This phase implements single-thread AOT execution. Compiler blackholing,
-dead-code-elimination protection, statistical confidence guarantees, JMH runner
+The [feature roadmap](ROADMAP.md) tracks wall time and instruction/cache
+simulation, stabilization, compiler qualification, PGO, six platform targets,
+coverage, fuzzing/sanitizers, and OpenSSF evidence. The
+[measurement contract](docs/MEASUREMENT.md) defines the required guarantees;
+the [assurance ledger](docs/ASSURANCE.md) records which evidence actually exists.
+
+This phase implements single-thread AOT execution, typed compiler sinks, and
+bounded statistical warmup and measurement convergence. Complete compiler/CPU
+qualification, statistical confidence guarantees, JMH runner
 API compatibility, multi-thread execution, Crema/JIT, guest-language benchmarks,
-and dedicated Bencher/Codspeed/Criterion exporters remain future work. The current
-output follows the JMH JSON structure; it does not claim JMH's measurement
-guarantees. Return values are currently discarded, so the example demonstrates
-the workflow rather than providing trustworthy performance comparisons yet.
+and dedicated Bencher/Codspeed/Criterion exporters remain future work. JIT
+compilation/deoptimization monitoring and Codspeed integration are also pending.
+Callgrind instruction/cache simulation works on the local Linux amd64 baseline,
+with fixed work budgets and retained raw dumps. Statistical convergence alone
+does not qualify accuracy. Wall output follows the JMH JSON structure;
+simulation has a distinct event-count report. Neither claims JMH's measurement
+guarantees. Returned values and explicit JMH `Blackhole` parameters use JMH's
+typed `consume` methods. Local O1/O2/O3 and PGO fixtures verify the intrinsic in
+final compiler LIR, including a disabled-intrinsic control. This establishes a
+concrete compiler result; general optimization resistance, CPU borders, and
+trustworthy performance comparisons remain qualification work.
+
+### Releases
+
+GitHub Releases provide `smh-VERSION-sdk.zip` (Java 25 CLI, runtime/API JAR,
+and runtime dependencies), `smh-VERSION-linux-amd64.zip` (native CLI and Rust
+bootstrap), and `SHA256SUMS`. After extracting the SDK, run
+`java -cp 'smh.jar:lib/*' dev.elide.smh.cli.Main --help`; use `;` instead of `:`
+on Windows. Native benchmark compilation still requires a compatible GraalVM.
+The initial release is experimental; consult the assurance ledger before making
+performance claims. Other native distribution targets remain on the roadmap.
+
+Release Please opens version/changelog PRs from conventional commits. Its PRs
+receive explicitly dispatched CI checks, because the default GitHub token does
+not trigger PR workflows. Maintainers merge a release PR after its checks pass;
+Release Please then creates the tag/release and builds and uploads its assets.
+Failed asset jobs can be rerun without changing the release tag.
+
+Automatic wall batch calibration is available in `examples/calibrated-run.json`.
+It retains every probe and selects a bounded batch before warmup. Calibration
+and statistical stabilization have independent limits; reaching a limit remains
+visible in results. Neither establishes clock accuracy or JIT quiescence.
 
 ### Setup
 
@@ -105,7 +145,8 @@ build/example/benchmarks examples/run.json
 Build configuration paths are relative to the build JSON file. `sources` accepts
 Java files or directories, which are searched recursively. `classpath` accepts
 additional JARs or class directories. The optional `nativeImage` field chooses
-the compiler executable. `nativeArgs` forwards compiler options, including GC,
+the compiler executable, or an argument array for a compiler launcher.
+Windows defaults to `cmd.exe /d /c native-image.cmd`. `nativeArgs` forwards compiler options, including GC,
 CPU target, memory limits, and build parallelism.
 
 Run configuration supports `include` (a Java regular expression), `params`
@@ -140,6 +181,50 @@ and unsupported JMH options fail compilation. The API is a supported subset of
 JMH's annotation API, rather than a replacement implementation of JMH internals.
 Results include per-iteration samples under `primaryMetric.rawData`; unavailable
 confidence statistics are represented as null values in JSON.
+
+### Stabilization and measurement evidence
+
+Run JSON accepts optional `warmupStability` and `measurementStability` policies.
+Each replaces the annotation's fixed iteration count for that phase; specifying
+both a policy and an explicit fixed count for the same phase is an error.
+All seven fields are required, for example:
+
+```json
+{
+  "warmupStability": {
+    "minimumSamples": 10,
+    "maximumSamples": 100,
+    "windowSize": 5,
+    "consecutiveWindows": 3,
+    "maximumRelativeDeviation": 0.02,
+    "maximumRelativeDrift": 0.01,
+    "maximumRelativeSlope": 0.01
+  }
+}
+```
+
+The monitor checks current-window sample standard deviation divided by mean,
+drift between two adjacent window means relative to their larger mean, and
+absolute linear trend over the current window relative to its mean. Tolerances
+are descriptive checks, without confidence or independence guarantees. Window
+size is at least two; minimum samples must cover two windows. The maximum must
+allow the declared number of consecutive passing windows.
+
+The `smh` JSON extension retains every warmup/measurement score, elapsed
+nanoseconds, operation count, sample order, stopping policy, and stopping reason.
+Adaptive phases report `STABLE` or `LIMIT_REACHED`; fixed phases are
+`not-assessed`. Results explicitly record `accuracy: unqualified`, the host
+execution mode, and JIT quiescence as `unknown`. An AOT host can embed guest/JIT
+runtimes, so image detection alone cannot establish quiescence. No samples
+are discarded. Limits currently bound sample count; independent phase time/work
+limits and JIT event providers remain roadmap items.
+
+Invocation fixtures are excluded from elapsed scores but included in the current
+iteration observer region. This difference is recorded in each report. Clock
+reversal, zero measured invocation duration, and elapsed/operation overflow fail
+the run. Successfully entered runner scopes unwind on failure, retaining the
+primary exception and suppressing cleanup failures. Generated multi-state
+fixture rollback still needs separate qualification.
 
 ### Optimization and layers
 
@@ -203,11 +288,15 @@ build/smh run build/shared/libbenchmarks.so --config examples/run.json \
   --bootstrap build/smh-bootstrap
 ```
 
-The Rust bootstrapper loads the library, calls `graal_create_isolate`, invokes
-`smh_run`, and calls `graal_tear_down_isolate`, reporting failures at each stage.
+The Rust bootstrapper uses bindings generated by pinned
+[Myna](https://github.com/elide-dev/myna) from [abi/smh.seam](abi/smh.seam).
+It resolves every required symbol, creates an isolate, checks all 256 bits of the
+generated ABI fingerprint, invokes `smh_run`, and tears down the isolate once.
+Entry and teardown failures retain the primary exit status and both diagnostics.
 The library and its dependent base-layer library must remain together.
 The example filename above is for Linux; other platforms use their normal shared
-library extension.
+library extension. See [the FFI contract](docs/FFI.md) for ownership, generation,
+and the limited Windows adaptation.
 
 Implement `dev.elide.smh.runtime.Observer` to integrate benchmark observers.
 Set `"observer": "your.package.ObserverClass"` in the build JSON and include its
@@ -217,9 +306,80 @@ benchmark name, parameter values, and iteration index. Iteration fixtures and
 warmup are outside the region; invocation fixtures remain inside the region.
 `afterIteration` also runs when benchmark execution fails. Observers can connect
 these regions to native instrumentation APIs. Tool-specific Codspeed/Valgrind
-adapters are not bundled yet.
+client-request adapters are not bundled yet. The Callgrind backend below uses
+its supported function-boundary collection controls.
+
+### Instruction/cache simulation
+
+On a Linux worker with Valgrind installed:
+
+```sh
+build/smh build --config examples/simulation-build.json
+build/smh simulate build/simulation/benchmarks \
+  --config examples/simulation-run.json --output build/simulation-run-1
+```
+
+The run config selects `"backend": "callgrind"` and a positive
+`invocationsPerIteration` budget. Each measured batch executes exactly that many
+invocations without clock reads. Trial/iteration fixtures, warmup, and reporting
+are outside collection; invocation-fixture benchmarks are rejected. Both
+monolithic and layered O2 images have passed the local native checks.
+
+Results retain exact instruction/cache/branch counts, the declared cache model,
+raw dump hashes, and instruction-per-operation ratios. Missing, contradictory,
+leaking, or extra region data fails the import. Accuracy remains unqualified.
+Online simulation convergence, Codspeed, and remote-worker orchestration remain
+open. See [the simulation contract and evidence](docs/SIMULATION.md).
 
 ### Validation
+
+```sh
+mise run lint
+mise run test-jvm
+mise run coverage-kernel
+mise run coverage
+mise run coverage-rust
+mise run coverage-rust-branch
+mise run check-abi
+mise run test-tools
+mise run test-portable
+```
+
+Elide produces JUnit XML and JaCoCo XML/HTML under `.dev/reports/`. The coverage
+checker counts owned production Java separately from test/generated code and
+rejects reports missing a production source. Its final gate requires 99% lines
+and branches; the statistics kernel requires 100% of both. The current local
+Java run passes: **99.51% lines, 99.43% branches**, including the annotation
+processor and builder. The statistics kernel has 100% of both. Rust's stable
+profile covers **99.31% of lines**, including `build.rs` (runtime sources: 100%).
+A separate pinned nightly profile covers **30/30 instrumented branch outcomes**.
+These compiler-defined counters do not prove every error path or optimizer
+behavior. Profiles use separate build directories; absent branch instrumentation
+cannot pass the branch gate.
+
+With Native Image and `objdump` installed, `mise run qualify-compiler` checks
+twelve actual generated sink adapters at O1/O2/O3 and the scheduled clock/call
+fixture. `mise run qualify-pgo` adds instrument/train/use. Both retain graphs,
+final LIR, disassembly, executable hashes, commands, and a deliberately broken
+intrinsic control under `build/qualification/`. Reports continue to label accuracy
+as unqualified and sink qualification as unverified: these fixtures do not prove control-flow
+dominance, CPU serialization, or every application/layer configuration.
+
+With Clang installed, `mise run check-abi-lowering` cross-compiles the C ABI for
+all six targets and compares it with Myna's LLVM declarations. This checks ABI
+lowering; it does not qualify native execution on those targets or apply ThinLTO
+optimizer contracts.
+
+`mise run test-simulation` exercises real Callgrind against monolithic and layered
+images, checks repeatability and fixed-work scaling, perturbs warmup/fixture work,
+and requires the production importer to reject disabled and unbounded collection.
+
+Hardened, SHA-pinned workflows configure Codecov coverage/JUnit uploads,
+six-platform portable JVM tests, separate Rust coverage profiles, compiler
+fixtures, CodeQL, dependency review, Scorecard, and toolchain controls. They have been syntax-checked locally;
+hosted execution and repository service configuration remain unverified. Portable
+JVM tests and sanitizer installation controls do not qualify native measurements
+or establish sanitizer coverage of SMH/SVM. No OpenSSF rating is claimed.
 
 `mise run test` checks generated adapters, primitive and enum parameter matrices,
 all fixture levels, observer boundaries, failure cleanup, JSON output, run
@@ -236,3 +396,24 @@ These build the native distribution first and write compiler logs under
 `build/native-tests/`. They also verify that an executable copied with its base
 library runs from a different directory.
 
+Wall run configurations can set `"wallBatchSize": 64` to time groups of 64
+invocations with one clock pair. The result records the batch size and normalizes
+by all operations. Batching applies to warmup and measurement and rejects
+invocation fixtures; the default remains one invocation. See
+[measurement policy](docs/MEASUREMENT.md) for calibration and qualification limits.
+
+Run `mise run test-rust-asan` for the instrumented Rust bootstrap/provider suite
+and required FFI heap-overflow, use-after-free, and leak negative controls. See
+[sanitizer scope and evidence](docs/SANITIZERS.md); SVM and JIT instrumentation
+remain separate work.
+
+Use `mise run test-miri` for strict-provenance Rust lifecycle interpretation
+under both borrow models, and `mise run fuzz-callgrind` for coverage-guided parser
+fuzzing with retained corpora and a required finding/replay control. See
+[sanitizer scope](docs/SANITIZERS.md) and [fuzzing](docs/FUZZING.md).
+
+
+`mise run fuzz-run-config` fuzzes run JSON and exact-value round trips. Run fields
+enforce their declared JSON types: quoted counts and numeric parameter values
+are rejected instead of coerced. Programmatic callers can use
+`RunConfig.fromJson(JsonElement)` without filesystem access.

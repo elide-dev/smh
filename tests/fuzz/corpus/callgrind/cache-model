@@ -1,0 +1,12 @@
+version: 1
+creator: callgrind-3.25.1
+pid: 1
+part: 1
+thread: 1
+desc: Trigger: Program termination
+events: Ir Dr
+summary: 18446744073709551617
+totals: 18446744073709551617 0
+desc: I1 cache: 32768 B, 64 B, 8-way associative
+desc: D1 cache: 32768 B, 64 B, 8-way associative
+desc: LL cache: 8388608 B, 64 B, 16-way associative

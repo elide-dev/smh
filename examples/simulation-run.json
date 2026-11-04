@@ -1,0 +1,6 @@
+{
+  "backend": "callgrind",
+  "invocationsPerIteration": 100,
+  "warmupIterations": 3,
+  "measurementIterations": 5
+}

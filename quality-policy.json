@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "coverage": {
+    "productionJava": { "line": 99.0, "branch": 99.0 },
+    "productionRust": { "line": 99.0, "branch": 99.0, "lineProfile": "Rust 1.91.1", "branchProfile": "nightly-2026-10-09; compiler-defined instrumented if/while outcomes, not exhaustive match/error-path coverage" },
+    "mathematicalKernel": { "line": 100.0, "branch": 100.0 },
+    "productionExclusions": [],
+    "generatedCode": "Compiler-generated Micronaut/Picocli code is reported separately; SMH processor source remains production code."
+  },
+  "measurementQualification": {
+    "requiredArchitectures": ["amd64", "arm64"],
+    "requiredOperatingSystems": ["linux", "macos", "windows"],
+    "simulation": ["callgrind", "codspeed"],
+    "blackholes": "Exact compiler profile must have positive and negative IR/disassembly and dynamic evidence.",
+    "borders": "Compiler ordering and CPU/runtime ordering require separate evidence."
+  }
+}

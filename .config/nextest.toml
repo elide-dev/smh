@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[profile.default]
+retries = 0
+fail-fast = false
+
+[profile.coverage-stable.junit]
+path = "junit.xml"
+report-name = "SMH Rust stable tests"
+
+[profile.coverage-nightly.junit]
+path = "junit.xml"
+report-name = "SMH Rust nightly tests"
+
+[profile.sanitizer-address.junit]
+path = "junit.xml"
+report-name = "SMH Rust AddressSanitizer tests"

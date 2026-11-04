@@ -1,0 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Elide supplies a `cc` compatibility shim to child scripts. Rust needs the host linker.
+[target.'cfg(target_os = "linux")']
+linker = "gcc"

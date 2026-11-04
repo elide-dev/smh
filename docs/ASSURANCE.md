@@ -18,7 +18,7 @@ initial harness does not yet establish accurate measurement or compiler borders.
 | FFI does not corrupt state | Myna ABI generation/checks, Rust/C/SVM differential tests, sanitizer/fuzzing evidence, failure injection | Pinned Myna bindings; six-target Java compilation and C ABI lowering; real Linux shared-image run; eleven Rust lifecycle/failure tests; ASan/LSan controls and Miri interpretation pass. SVM instrumentation and native platform qualification open |
 | Claimed platforms work natively | Actual runner/hardware logs and artifact identity for each of six OS/architecture cells | Linux amd64 functional only |
 | Code coverage is comprehensive | All production Java packages plus separate Rust/native reports; line and branch thresholds; no hidden exclusions | Java: 1429/1436 lines (99.51%), 870/875 branches (99.43%); kernel 151/151 lines, 68/68 branches. Rust stable: 144/145 lines (99.31%) including build.rs; nightly: 30/30 instrumented branch outcomes. Native/SVM instrumentation open |
-| Supply chain and maintenance are secure | Hardened CI, reviews, signed provenance, dependency policy, OpenSSF evidence | SHA-pinned workflows lint locally; no hosted runs or badge claimed; review/provenance controls open |
+| Supply chain and maintenance are secure | Hardened CI, reviews, signed provenance, dependency policy, OpenSSF evidence | Hosted CodeQL and Scorecard pass; required checks and branch protection configured; signed provenance and review-policy qualification remain open |
 
 The coverage snapshot above is from the November 4, 2026 local Elide JUnit run
 after blackhole, Myna, Callgrind, and in-process compiler/CLI/build tests: 72 JUnit tests pass.
@@ -35,8 +35,9 @@ host-specific loader-path decision; a passing coverage target is not full proof.
 The native Micronaut CLI was rebuilt locally. An O2 layered benchmark run
 exercised adaptive warmup and measurement across the complete example matrix;
 every result retained both phase histories and explicitly reported unqualified
-accuracy. Current local portable-bundle execution passed all 61 tagged tests. Hosted
-platform workflows have not run. Evidence logs include
+accuracy. [Hosted portable execution](https://github.com/elide-dev/smh/actions/runs/41936178179)
+passes all 71 tagged tests on each of six native JVM hosts. JVM coverage passes
+on the four Elide-supported hosts. Earlier local evidence logs include
 `build/native-final-milestone.log`, `build/verified-adaptive-build.out`,
 `build/verified-adaptive-run.out`, and `build/callgrind-probe/portable.log`.
 
@@ -84,7 +85,7 @@ or invalid counters, and never accepts absent branch instrumentation as 100%.
 Pinned Nextest produces actual eleven-test JUnit XML for each profile, with retries
 disabled. The identity manifests record compiler, coverage tool, test runner, and
 commands. CI configures separate Codecov uploads for Java and Rust coverage and
-test results; hosted uploads are not yet evidence. Python orchestration coverage,
+test results; hosted JVM uploads now pass alongside the coverage gates. Python orchestration coverage,
 native helper/SVM coverage, and broader mutation/fuzzing evidence remain open.
 
 One intervening build was rejected after runtime packaging overlapped a layer
@@ -170,22 +171,23 @@ dynamic/JIT event monitoring, and simulation convergence remain open.
 
 | Native host | Portable JVM behavior | Native CLI/benchmark workflow | Measurement/compiler qualification |
 | --- | --- | --- | --- |
-| Linux amd64 | Locally exercised | O1/O2/O3 layered; full-image PGO; Myna shared-image path; Callgrind O2 monolithic/layered | Twelve concrete sinks and scheduled-call fixture at O1/O2/O3 + PGO; concrete Callgrind regions and broken controls; general accuracy open |
-| Linux arm64 | CI configured, unexecuted | Open | Open |
-| macOS amd64 | CI configured, unexecuted | Open; pinned Elide has no distribution for this host | Open |
-| macOS arm64 | CI configured, unexecuted | Open | Open |
-| Windows amd64 | CI configured, unexecuted | Open | Open |
-| Windows arm64 | CI configured, unexecuted | Open; pinned Elide has no distribution for this host | Open |
+| Linux amd64 | 71 tests pass in hosted CI | O1/O2/O3 layered; full-image PGO; Myna shared-image path; Callgrind O2 monolithic/layered | Twelve concrete sinks and scheduled-call fixture at O1/O2/O3 + PGO; concrete Callgrind regions and broken controls; general accuracy open |
+| Linux arm64 | 71 tests pass in hosted CI | Open | Open |
+| macOS amd64 | 71 tests pass in hosted CI | Open; pinned Elide has no distribution for this host | Open |
+| macOS arm64 | 71 tests pass in hosted CI | Open | Open |
+| Windows amd64 | 71 tests pass in hosted CI | Open | Open |
+| Windows arm64 | 71 tests pass in hosted CI | Open; pinned Elide has no distribution for this host | Open |
 
 The six-platform JVM job executes a checksum-verified bundle compiled with Elide;
 the launcher uses native runner Java. That does not exercise a native SMH binary.
 The current toolchain release has Linux amd64/arm64 and macOS arm64 builds;
 missing distributions are capability gaps, not successful qualification.
 
-The canonical repository is `elide-dev/smh`, currently internal. On inspection,
-GitHub code security and secret scanning were disabled. Public OpenSSF evidence,
-hosting permissions, branch policies, and real Codecov uploads remain separate
-tasks; writing workflow files does not enable those services.
+The canonical repository is public at `elide-dev/smh`. Secret scanning and push
+protection are enabled. Main has required CI checks, linear history, and blocked
+force-pushes/deletion; administrators retain bypass access for repository setup.
+Codecov uploads, CodeQL, and Scorecard have executed successfully. Signed release
+provenance, independent review history, and the Best Practices badge remain open.
 
 Each evidence record must identify source revision/tree digest, command, machine,
 toolchain and runtime versions/hashes, applicable assumptions, output artifacts,

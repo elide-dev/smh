@@ -377,8 +377,10 @@ and requires the production importer to reject disabled and unbounded collection
 
 Hardened, SHA-pinned workflows configure Codecov coverage/JUnit uploads,
 six-platform portable JVM tests, separate Rust coverage profiles, compiler
-fixtures, CodeQL, dependency review, Scorecard, and toolchain controls. They have been syntax-checked locally;
-hosted execution and repository service configuration remain unverified. Portable
+fixtures, CodeQL, dependency review, Scorecard, and toolchain controls. Hosted
+JVM coverage passes on Linux amd64/arm64, macOS arm64, and Windows amd64;
+[portable tests pass on all six hosts](https://github.com/elide-dev/smh/actions/runs/41936178179).
+Release Please manages version PRs, tags, and GitHub Releases. Portable
 JVM tests and sanitizer installation controls do not qualify native measurements
 or establish sanitizer coverage of SMH/SVM. No OpenSSF rating is claimed.
 

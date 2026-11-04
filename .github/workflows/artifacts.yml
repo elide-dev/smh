@@ -14,7 +14,7 @@ name: Release artifacts
 permissions:
   contents: read
 concurrency:
-  group: artifacts-${{ github.event.pull_request.number || github.ref }}
+  group: artifacts-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   linux:

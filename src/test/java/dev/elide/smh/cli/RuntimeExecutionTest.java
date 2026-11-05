@@ -72,6 +72,9 @@ class RuntimeExecutionTest {
     assertTrue(jvm.command().contains(classes.toString()));
     assertTrue(
         jvm.environment().get("SMH_EXECUTION_IDENTITY").contains("\"compilerRequested\":\"c2\""));
+    c.execution = "hotspot";
+    assertFalse(RuntimeExecution.prepare(c, run).command().contains("-XX:-TieredCompilation"));
+    c.execution = "hotspot-c2";
     c.runtimeJavaHome = c.javaHome;
     c.javaHome = null;
     // Keep the javac selection stable for this test's cached input identity.
@@ -162,7 +165,10 @@ class RuntimeExecutionTest {
             "-XX:+UseJVMCICompiler",
             "-XX:+TieredCompilation",
             "-XX:-JITCompilation",
-            "-XX:-UseCompiler")) {
+            "-XX:-UseCompiler",
+            "-XX:+EnableJVMCI",
+            "-XX:AOTCache=x",
+            "-XX:SharedArchiveFile=x")) {
       c.runtimeArgs.clear();
       c.runtimeArgs.add(argument);
       assertThrows(IllegalArgumentException.class, c::validate);

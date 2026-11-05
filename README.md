@@ -53,6 +53,12 @@ execution mode runs the same generated workloads for comparison. Both reuse the
 bytecode cache and retain their execution identity in results. See
 [execution modes and build reuse](docs/AOT.md#cremaristretto-and-hotspotc2).
 
+For an independent JVM reference, `smh jmh` runs the bundled JMH 1.37 harness on
+HotSpot, optionally training and reusing a JDK 25 Leyden AOT cache. Results retain
+JMH's original observations and render with SMH's histograms and comparison views.
+[Compare with JMH and Leyden](docs/AOT.md#delegated-jmh-and-leyden); harness differences
+remain explicit rather than being treated as interchangeable measurements.
+
 ## Run your first benchmark
 
 From a checkout, with [mise](https://mise.jdx.dev), Python 3, GraalVM JDK 25

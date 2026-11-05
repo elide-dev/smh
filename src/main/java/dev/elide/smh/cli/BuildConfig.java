@@ -110,8 +110,8 @@ public final class BuildConfig {
   }
 
   public void validate() {
-    if (!Set.of("aot", "crema", "hotspot-c2").contains(execution))
-      throw new IllegalArgumentException("execution must be aot, crema or hotspot-c2");
+    if (!Set.of("aot", "crema", "hotspot", "hotspot-c2").contains(execution))
+      throw new IllegalArgumentException("execution must be aot, crema, hotspot or hotspot-c2");
     if (!execution.equals("aot") && (shared || !pgo.equals("off") || observer != null))
       throw new IllegalArgumentException(
           "Runtime-loaded execution does not support shared libraries, PGO or custom observers");
@@ -121,9 +121,12 @@ public final class BuildConfig {
               || arg.startsWith("-Xmx")
               || arg.startsWith("-XX:"))
           || arg.contains("UseJVMCICompiler")
+          || arg.contains("EnableJVMCI")
           || arg.contains("TieredCompilation")
           || arg.contains("JITCompilation")
-          || arg.contains("UseCompiler"))
+          || arg.contains("UseCompiler")
+          || arg.contains("AOT")
+          || arg.contains("SharedArchive"))
         throw new IllegalArgumentException(
             "Unsupported or compiler-changing runtime argument: " + arg);
     if (nativeImage.isEmpty() || nativeImage.stream().anyMatch(String::isBlank))

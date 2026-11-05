@@ -20,8 +20,9 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     common = [ROOT / name for name in ("LICENSE", "LICENSE-APACHE", "LICENSE-MIT", "README.md")]
     sdk = [ROOT / "build/smh.jar", ROOT / "build/smh-runtime.jar"]
+    sdk += [ROOT / "build/smh-jmh.jar"]
     sdk += sorted((ROOT / "build/lib").glob("*.jar"))
-    if len(sdk) <= 2:
+    if len(sdk) <= 3:
         raise RuntimeError("SDK dependencies are missing")
     layers = []
     for directory in sorted((ROOT / "build/layers").glob("*")):

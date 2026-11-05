@@ -46,6 +46,11 @@ final class BytecodeBuilder {
 
   private static Path compile(BuildConfig c, boolean dryRun, AotBuilder.Commands commands)
       throws Exception {
+    return compile(c, dryRun, commands, false);
+  }
+
+  static Path compile(BuildConfig c, boolean dryRun, AotBuilder.Commands commands, boolean jmh)
+      throws Exception {
     Platform platform = Platform.current();
     List<Path> libraries;
     try (var stream = Files.list(c.home.resolve("lib"))) {
@@ -86,19 +91,23 @@ final class BytecodeBuilder {
             "-processorpath",
             classpath(processor),
             "-processor",
-            "dev.elide.smh.processor.BenchmarkProcessor",
+            jmh
+                ? "org.openjdk.jmh.generators.BenchmarkProcessor"
+                : "dev.elide.smh.processor.BenchmarkProcessor",
             "-s",
             generated.toString(),
             "-d",
             classes.toString()));
-    if (c.observer != null) compile.add("-Asmh.observer=" + c.observer);
-    compile.add("-Asmh.target=" + platform.targetTriple());
+    if (!jmh && c.observer != null) compile.add("-Asmh.observer=" + c.observer);
+    if (!jmh) compile.add("-Asmh.target=" + platform.targetTriple());
     javaSources.forEach(p -> compile.add(p.toString()));
     if (dryRun || c.verbose) System.err.println(String.join(" ", compile));
     if (!dryRun) commands.run(compile, c.output);
-    if (!dryRun && !Files.exists(classes.resolve("dev/elide/smh/generated/Main.class")))
+    Path marker =
+        classes.resolve(jmh ? "META-INF/BenchmarkList" : "dev/elide/smh/generated/Main.class");
+    if (!dryRun && !Files.exists(marker))
       throw new IllegalArgumentException("No @Benchmark methods found");
-    return classes.resolve("dev/elide/smh/generated/Main.class");
+    return marker;
   }
 
   static List<Path> runtime(BuildConfig c) throws IOException {

@@ -30,6 +30,7 @@ dependencies {
   maven {
     packages {
       "org.openjdk.jmh:jmh-core:1.37"
+      "org.openjdk.jmh:jmh-generator-annprocess:1.37"
       "com.google.code.gson:gson:2.13.2"
       "org.graalvm.sdk:nativeimage:25.0.1"
       "io.micronaut.picocli:micronaut-picocli:5.9.0"

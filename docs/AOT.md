@@ -159,11 +159,64 @@ preparation times, then exercises both hosts with compilation diagnostics. Its
 timings identify their scope and are local observations, not portable latency
 guarantees.
 
-JMH delegation is a separate future harness integration. A JMH job has its own
-warmup, forks, sinks, and timing semantics. Its native JSON must retain that
-identity; it must not be relabeled as an SMH measurement. Current `--compare`
-accepts SMH wall results only and reports descriptive deltas, not equivalence
-between execution models or statistical significance.
+## Delegated JMH and Leyden
+
+The SDK includes `smh-jmh.jar`, JMH core and annotation processor **1.37**, and
+pinned runtime dependencies. `smh jmh` compiles sources with JMH's official
+processor into a cached `benchmarks.jar`; SMH adapters use a separate cache.
+No native compiler is required. JMH owns the generated loops, blackholes, fork
+lifecycle, timing and JSON serialization. SMH handles orchestration and display.
+
+```sh
+smh jmh --build-config smh-build.json --config smh-run.json \
+  --runtime-java-home /path/to/jdk-25 --output results/jmh-hotspot
+smh jmh --build-config smh-build.json --config smh-run.json \
+  --runtime-java-home /path/to/jdk-25 --aot-cache --output results/jmh-leyden
+smh bench --execution crema --build-config smh-build.json --config smh-run.json \
+  --compare results/jmh-hotspot/results.json --display tui
+```
+
+The default `--execution hotspot` uses tiered C1/C2, with JVMCI disabled.
+`--execution hotspot-c2` is available for a C2-only experiment; it cannot be
+combined with `--aot-cache`. `--forks` defaults to three fresh forks and must be
+positive. One worker is selected explicitly. Fixed iteration counts, durations,
+modes and parameters come from the SMH run configuration; omitted settings defer
+to JMH annotations/defaults. SMH calibration, batching, simulation and adaptive
+stability policies are rejected, since their semantics cannot be translated.
+The display adapter supports throughput, average-time, and single-shot modes.
+It rejects other JMH result modes and preserves the original files.
+
+Every job requires a **new** `--output` directory. It contains the job description,
+execution identity, commands, logs, untouched `jmh-results.json`, and adapted
+`results.json`. `--compare` accepts adapted JMH or SMH wall results with matching
+benchmark/mode/parameters/units; it reports descriptive deltas, not significance
+or cross-harness equivalence. Units are never silently converted. The footer
+identifies JMH and Leyden, and plots identify multi-fork iteration order.
+
+`--aot-cache` uses JDK 25's `-XX:AOTCacheOutput` to train in a separate, nonforked
+JMH process running the selected workload and configuration. Training is not a
+performance result: JMH fork-only compiler hints and blackhole configuration can
+differ from this training process. Measurement uses fresh JMH forks with
+`-XX:AOTMode=on` and `-XX:AOTCache`. Startup AOT logging verifies that each fork
+opened the expected cache and retained the full module graph, without AOT errors;
+a failed check retains raw data but does not publish adapted performance results.
+JVM log wording changes may require an adapter update; they fail closed.
+
+Caches live under the SDK's writable `jmh-aot` directory. Keys cover source and
+classpath content, JMH/SMH artifacts, compiler identity, runtime flags, training
+settings, and environment. Completed cache generations are locked, hashed, and
+atomically published; missing or corrupt artifacts retrain. Cache paths are local
+to this SDK and JDK installation, not portable distribution assets. AOT requires
+JAR classpaths. Injected JVM environment options are rejected; use `runtimeArgs`.
+JMH fork options from `@Fork` are overridden by this explicit job configuration.
+
+Leyden improves startup/warmup through cached classes, linking and method
+profiles; this is not Native Image or a cache of compiled C2 methods. JMH
+steady-state scores do not establish a startup advantage. See
+[the JDK AOT API](https://docs.oracle.com/en/java/javase/25/docs/api/jdk.management/jdk/management/HotSpotAOTCacheMXBean.html),
+[JEP 514](https://openjdk.org/jeps/514), and [JEP 515](https://openjdk.org/jeps/515).
+`mise run test-jmh` exercises actual JMH forks, Leyden creation/reuse/source
+invalidation, raw-data preservation, visuals and failure propagation.
 
 ## Profile-guided optimization
 

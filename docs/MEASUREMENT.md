@@ -20,9 +20,24 @@ Execution metadata records compiler selection and host/payload identity; it
 does not establish that a particular method compiled or that JIT activity stopped.
 Validation records compilation diagnostics separately and keeps quiescence unknown.
 
-Harness identity is another comparison dimension. Delegated JMH is not currently
-implemented. Future JMH results must retain JMH's own forks, warmup, sinks, raw
-observations, and timing semantics, separately from SMH's result schema.
+Harness identity is another comparison dimension. `smh jmh` delegates to pinned
+JMH 1.37 and its generated harness. The original `jmh-results.json` retains
+JMH's forks, warmup, sinks, observations, errors, secondary metrics, and timing
+semantics. `results.json` adds SMH display metadata and empty parameter maps
+where absent; it does not recompute scores or confidence intervals. Histograms
+show iteration scores, flattened in fork order, not invocation latencies.
+Cross-harness deltas are descriptive: sink, inlining, lifecycle, and loop costs
+can differ. The aim is to test where AOT or Crema/Ristretto outperforms HotSpot,
+not to select settings or discard results to force that outcome.
+
+HotSpot `hotspot` uses tiered C1/C2; `hotspot-c2` disables tiered compilation.
+The optional JDK 25 Leyden cache stores classes, linking state, and method
+profiles. Training is separate and excluded from performance deltas. Measurement
+forks require the cache and cache-loading evidence; unsupported or degraded
+loading fails the job. JMH iteration scores do not measure JVM startup. Neither
+JMH's total process duration (which includes forks and warmup) nor cache training
+time is a cold-start score. Startup and steady-state performance require separate
+experiments. See [delegated JMH](AOT.md#delegated-jmh-and-leyden).
 
 Wall measurements use a monotonic elapsed-time source and integer operation
 counts. Simulation measurements use native simulator event counts and a declared

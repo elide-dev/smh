@@ -136,3 +136,17 @@ rounded presentation without changing raw values, width adaptation, comparison
 matching, missing/zero/invalid baselines, simulation event bars, exit codes, and
 plain-mode policy. Simulation rendering fixtures establish presentation behavior;
 they do not establish hardware accuracy or real Callgrind execution.
+
+## JMH and Leyden
+
+Build the SDK, then run `mise run test-jmh` with a JDK 25 `java` on PATH, or
+`mise exec -- python3 tools/test_jmh.py --java-home /path/to/jdk-25`. This exercises
+actual JMH annotation processing, two parameter cases and two measurement forks,
+uncached tiered HotSpot, C2-only, Leyden training/reuse/source invalidation, and
+benchmark failure propagation. Evidence is retained under `build/jmh-tests/`.
+Unit tests separately inject malformed results, corrupt caches, missing artifacts,
+failed training, and degraded cache-loading logs; those fixtures are not JVM proof.
+
+To verify an extracted distribution, add `--home /path/to/sdk` and
+`--cli /path/to/sdk/smh` to `tools/test_jmh.py`. This executes the same checks
+through the packaged native CLI and JARs, including installations with spaces.

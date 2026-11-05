@@ -14,6 +14,7 @@ guide says otherwise.
 | Install SMH and run a Java benchmark | [Getting started](GETTING_STARTED.md) |
 | Configure parameters, timing, and stabilization | [Running benchmarks](USAGE.md) |
 | Build with layers, optimization levels, or PGO | [AOT builds](AOT.md) |
+| Compare against JMH and HotSpot Leyden | [Delegated JMH](AOT.md#delegated-jmh-and-leyden) |
 | Measure instructions and cache events | [Callgrind simulation](SIMULATION.md) |
 | Understand exactly what is measured | [Measurement contract](MEASUREMENT.md) |
 | Assess supported platforms and evidence | [Assurance ledger](ASSURANCE.md) |

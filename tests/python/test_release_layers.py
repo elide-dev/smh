@@ -26,6 +26,7 @@ class ReleaseLayersTest(unittest.TestCase):
         for name in (
             "smh.jar",
             "smh-runtime.jar",
+            "smh-jmh.jar",
             "lib/test.jar",
             "smh",
             "smh-bootstrap",
@@ -65,6 +66,7 @@ class ReleaseLayersTest(unittest.TestCase):
             self.assertIn(f"layers/{'a' * 64}/smh-base.nil", bundle.namelist())
             self.assertFalse(any("pending" in name for name in bundle.namelist()))
         with zipfile.ZipFile(dist / "smh-1.2.3-linux-amd64-crema.zip") as bundle:
+            self.assertIn("smh-jmh.jar", bundle.namelist())
             self.assertIn("crema/smh-crema.json", bundle.namelist())
             self.assertIn("crema/libjava.so", bundle.namelist())
 

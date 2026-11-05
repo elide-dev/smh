@@ -340,12 +340,68 @@ blackhole qualification. C2 can optimize the harness together with workload code
 Crema crosses the AOT-host/runtime-loaded adapter boundary. Runtime-loaded results
 retain `jitCompilation: unverified` and `jitQuiescence: unknown`; external
 validation logs do not turn every later run into a qualified one. Diagnostic and
-training results are excluded from score deltas. JMH delegation, JIT-event
+training results are excluded from score deltas. JIT-event
 stabilization, additional JDK modules, and the broader platform matrix remain
 open. Cache checks detect changed inputs before publication but do not freeze
 external files during compilation or execution. Two concurrent producers are not crash-stress
 or distributed-filesystem qualification. Local build timings include their stated
 preparation/process scope and are not portable latency guarantees.
+
+## Delegated JMH and Leyden
+
+`smh jmh` delegates to JMH 1.37's own annotation processor and generated loops;
+SMH does not implement JMH's timer or sinks. The packaged `smh-jmh.jar` supplies
+a small JVM-only launcher. Fixed options and exact JVM argument arrays override
+fork annotations; one worker and positive fresh measurement forks are explicit.
+Original primary/secondary metrics, confidence intervals, and nested fork/iteration
+observations remain unchanged in `jmh-results.json`. The adapted `results.json`
+adds harness/runtime/cache identity and display metadata. Tests check metric
+preservation, parameter identity, histograms, fork-order labels, and descriptive
+cross-harness deltas. No accuracy or JIT-quiescence qualification is inferred.
+
+Local Linux amd64 integration with Oracle GraalVM JDK 25.0.4.1 exercised actual
+JMH tiered C1/C2 and C2-only forks, two parameter cases, two forks per case and
+three measurement iterations. `tools/test_jmh.py --java-home /usr/lib/jvm/gvm.jdk25`
+retains commands, logs, raw/adapted JSON and artifact hashes under
+`build/jmh-tests/run-*/`. It checks Leyden creation, cache reuse, source-content
+invalidation, cross-harness rendering, and nonzero exit/no adapted report after
+a deliberate benchmark exception. These short fixtures establish orchestration
+behavior, not a speed advantage or a representative warmup duration.
+The extracted native distribution was also exercised from an installation path
+containing spaces: the complete JMH/Leyden suite passed through its native CLI,
+then packaged Crema and a layered Native Image of the same workload rendered
+comparisons against the retained JMH baseline. Archive checksums and native CLI
+identity are retained in `build/jmh-tests/package with spaces-*/verification.json`.
+This is local packaging/integration evidence, not hosted release evidence.
+
+Leyden uses JDK 25 `AOTCacheOutput` in a separate nonforked training process.
+Training files have a training identity and are never adapted as measurement
+results. JMH's fork-only compiler hints and blackholes can differ in training;
+these profiles are not claimed equivalent to profiles from measured forks.
+Measurement requires `AOTMode=on` and the cache path. Each fork must log opening
+the expected cache and an enabled full module graph, without AOT errors. Initial
+experiments exposed a JVMCI module-graph mismatch despite a successful JMH exit;
+explicitly disabling JVMCI in both training and measurement fixed it. Degraded
+loading is now rejected before adapted results are published. Log checks are
+conservative and tied to the exercised JVM format. They establish archive use,
+not that every benchmark class or method profile was restored.
+
+Unit tests inject corrupt archives, missing artifacts, failed training, missing
+fork-loading evidence, and AOT error logs. Those fixtures are control-flow proof,
+not JVM evidence. Published caches reuse the existing locked/hash-verified atomic
+artifact cache. Keys retain build and training identity, runtime flags, JDK and
+JAR hashes. External files are not frozen while executing; undeclared files read
+by a workload or a flag remain outside the cache contract. Cache artifacts are
+local to an installation and are not shipped as portable performance profiles.
+
+Parent cleanup terminates observed descendant processes before the parent and
+allows a bounded interval for JVM child reaping; a real parent/child JVM test
+covers this path. This does not qualify arbitrary detached processes or a child
+that creates a new process concurrently with termination. The terminal renderer
+and result adaptation run outside the measured JVM loops. AOT startup logging is
+retained; no JVM cold-start metric or steady-state speed ranking is claimed.
+The release workflow includes the integration check; local execution does not
+establish a hosted workflow pass or a published release.
 
 ## Repository and release integrity
 

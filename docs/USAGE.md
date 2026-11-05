@@ -101,6 +101,8 @@ comparing results.
 
 ## Reading results
 
+For official JMH forks and HotSpot Leyden caches, use [`smh jmh`](AOT.md#delegated-jmh-and-leyden).
+
 Wall results follow the JMH JSON structure with an additional `smh` object.
 
 | Field | Interpretation |

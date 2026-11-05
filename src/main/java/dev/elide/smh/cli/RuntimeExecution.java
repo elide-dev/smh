@@ -100,7 +100,7 @@ final class RuntimeExecution {
       identity.addProperty("compilerRequested", "ristretto");
       command.add(executable.toAbsolutePath().toString());
       command.addAll(c.runtimeArgs);
-    } else if (c.execution.equals("hotspot-c2")) {
+    } else if (Set.of("hotspot", "hotspot-c2").contains(c.execution)) {
       Path home = c.runtimeJavaHome == null ? c.javaHome : c.runtimeJavaHome;
       if (home == null)
         throw new IllegalArgumentException("hotspot-c2 requires runtimeJavaHome (or javaHome)");
@@ -108,10 +108,11 @@ final class RuntimeExecution {
       executableDigest = BuildCache.hash(executable);
       command.add(executable.toAbsolutePath().toString());
       command.addAll(c.runtimeArgs);
-      command.addAll(List.of("-XX:-UseJVMCICompiler", "-XX:-TieredCompilation"));
+      command.add("-XX:-UseJVMCICompiler");
+      if (c.execution.equals("hotspot-c2")) command.add("-XX:-TieredCompilation");
       runtimeArgs.add("-XX:-UseJVMCICompiler");
-      runtimeArgs.add("-XX:-TieredCompilation");
-      identity.addProperty("compilerRequested", "c2");
+      if (c.execution.equals("hotspot-c2")) runtimeArgs.add("-XX:-TieredCompilation");
+      identity.addProperty("compilerRequested", c.execution.equals("hotspot") ? "tiered-c2" : "c2");
       identity.addProperty(
           "toolchain", BuildCache.compilerIdentity(List.of(executable.toString())));
       command.addAll(

@@ -224,8 +224,27 @@ final class TerminalDisplay {
     return shown;
   }
 
+  static void terminate(Process child) {
+    if (child != null && child.isAlive()) {
+      // Allow the parent JVM to reap terminated forks before terminating it as well.
+      var exits =
+          child
+              .descendants()
+              .map(
+                  descendant -> {
+                    descendant.destroyForcibly();
+                    return descendant.onExit();
+                  })
+              .toArray(java.util.concurrent.CompletableFuture[]::new);
+      java.util.concurrent.CompletableFuture.allOf(exits)
+          .completeOnTimeout(null, 1, TimeUnit.SECONDS)
+          .join();
+      child.destroyForcibly().onExit().join();
+    }
+  }
+
   static void restore(Process child, PrintStream err) {
-    if (child != null && child.isAlive()) child.destroyForcibly().onExit().join();
+    terminate(child);
     err.print("\033[0m\033[?25h");
     err.flush();
   }
@@ -294,9 +313,13 @@ final class TerminalDisplay {
     Path command = Path.of(log + ".command.json");
     Files.writeString(command, new Gson().toJson(builder.command()));
     Process child = null;
+    Thread shutdown = null;
     long start = System.nanoTime();
     try {
       child = builder.redirectErrorStream(true).redirectOutput(log.toFile()).start();
+      Process running = child;
+      shutdown = new Thread(() -> terminate(running), "smh-build-cleanup");
+      Runtime.getRuntime().addShutdownHook(shutdown);
       int tick = 0;
       while (!child.waitFor(80, TimeUnit.MILLISECONDS)) {
         if (animate) {
@@ -316,7 +339,8 @@ final class TerminalDisplay {
       if (verbose || status != 0) Files.copy(log, err);
       return status;
     } finally {
-      if (child != null && child.isAlive()) child.destroyForcibly().onExit().join();
+      terminate(child);
+      if (shutdown != null) Runtime.getRuntime().removeShutdownHook(shutdown);
     }
   }
 
@@ -380,6 +404,14 @@ final class TerminalDisplay {
         List<Double> samples = new ArrayList<>();
         for (JsonElement fork : metric.getAsJsonArray("rawData"))
           for (JsonElement value : fork.getAsJsonArray()) samples.add(value.getAsDouble());
+        if (metric.getAsJsonArray("rawData").size() > 1)
+          table
+              .append(DIM)
+              .append("    ")
+              .append(metric.getAsJsonArray("rawData").size())
+              .append(" forks · iteration scores shown in fork order")
+              .append(RESET)
+              .append('\n');
         if (!samples.isEmpty()) table.append(ResultDetails.render(row, samples, width));
         else table.append(DIM).append("    No iteration scores").append(RESET).append('\n');
         if (row.has("measurementBatchSize") && row.get("measurementBatchSize").getAsLong() > 1)
@@ -519,6 +551,11 @@ final class TerminalDisplay {
             && execution.has("purpose")
             && !execution.get("purpose").getAsString().equals("measurement"))
           qualifications.add(clean(execution.get("purpose").getAsString()) + " run");
+        if (execution != null && new JsonPrimitive("jmh").equals(execution.get("harness"))) {
+          engine = "JMH " + JmhBuilder.VERSION + " · " + engine;
+          if (execution.has("aotCacheKey")) engine += "Leyden · ";
+          qualifications.add("JMH harness · cross-harness equivalence not established");
+        }
         if (row.has("vmName"))
           environments.add(
               engine
@@ -531,6 +568,7 @@ final class TerminalDisplay {
         if (row.has("mode")) modes.add(row.get("mode").getAsString());
       }
       if (comparison != null) {
+        err.println("  " + DIM + "Baseline · " + clean(comparison.description()) + RESET);
         String quantity =
             modes.equals(Set.of("thrpt"))
                 ? "throughput"

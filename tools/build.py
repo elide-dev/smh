@@ -49,6 +49,18 @@ def build():
         classes,
         ".",
     )
+    run(
+        "elide",
+        "jar",
+        "--",
+        "--create",
+        "--date=2000-01-01T00:00:00Z",
+        "--file",
+        "build/smh-jmh.jar",
+        "-C",
+        classes,
+        "dev/elide/smh/jmh",
+    )
     # Stable runtime and API classes are the ONLY SMH code selected for the base layer.
     run(
         "elide",

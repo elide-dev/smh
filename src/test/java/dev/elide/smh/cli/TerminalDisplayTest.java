@@ -320,6 +320,41 @@ class TerminalDisplayTest {
   }
 
   @Test
+  void terminationReapsDelegatedJvmForks() throws Exception {
+    Path fork =
+        Files.writeString(
+            directory.resolve("Fork.java"),
+            "class Fork { public static void main(String[] args) throws Exception {"
+                + " Thread.sleep(30000); } }");
+    String java =
+        Path.of(
+                System.getProperty("java.home"),
+                "bin",
+                dev.elide.smh.runtime.Platform.current().executable("java"))
+            .toString();
+    var gson = new com.google.gson.Gson();
+    Process parent =
+        child(
+                "var fork = new ProcessBuilder("
+                    + gson.toJson(java)
+                    + ", "
+                    + gson.toJson(fork.toString())
+                    + ").start(); System.out.println(fork.pid()); "
+                    + "System.out.flush(); fork.waitFor(); Thread.sleep(30000);")
+            .start();
+    try {
+      long pid = Long.parseLong(parent.inputReader().readLine());
+      ProcessHandle descendant = ProcessHandle.of(pid).orElseThrow();
+      assertTrue(descendant.isAlive());
+      TerminalDisplay.terminate(parent);
+      assertFalse(parent.isAlive());
+      assertFalse(descendant.isAlive());
+    } finally {
+      TerminalDisplay.terminate(parent);
+    }
+  }
+
+  @Test
   void buildDiagnosticsAreRetainedAndFailuresOrVerboseRunsReplayThem() throws Exception {
     var animated = new ByteArrayOutputStream();
     assertEquals(

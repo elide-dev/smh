@@ -17,7 +17,13 @@ import picocli.CommandLine.*;
     description = "SubstrateVM Microbenchmark Harness",
     mixinStandardHelpOptions = true,
     version = "smh 0.2.0", // x-release-please-version
-    subcommands = {Main.Build.class, Main.Run.class, Main.Simulate.class, Main.Bench.class})
+    subcommands = {
+      Main.Build.class,
+      Main.Run.class,
+      Main.Simulate.class,
+      Main.Bench.class,
+      Main.Jmh.class
+    })
 public class Main implements Runnable {
   public static void main(String[] args) {
     System.exit(execute(args));
@@ -199,7 +205,7 @@ public class Main implements Runnable {
     @Option(names = "--java-home")
     Path javaHome;
 
-    @Option(names = "--execution", description = "aot, crema or hotspot-c2")
+    @Option(names = "--execution", description = "aot, crema, hotspot or hotspot-c2")
     String execution;
 
     @Option(
@@ -260,6 +266,65 @@ public class Main implements Runnable {
           display,
           true,
           comparison);
+    }
+  }
+
+  @Singleton
+  @Command(
+      name = "jmh",
+      description = "Run pinned JMH on HotSpot, optionally with a Leyden AOT cache",
+      mixinStandardHelpOptions = true)
+  public static class Jmh implements Callable<Integer> {
+    @Option(names = "--build-config", defaultValue = "smh-build.json")
+    Path buildConfig;
+
+    @Option(names = "--config", defaultValue = "smh-run.json")
+    Path config;
+
+    @Option(names = "--home")
+    Path home;
+
+    @Option(names = "--runtime-java-home")
+    Path runtimeJavaHome;
+
+    @Option(
+        names = "--execution",
+        defaultValue = "hotspot",
+        description = "hotspot (tiered C2) or hotspot-c2 (C2 only)")
+    String execution;
+
+    @Option(names = "--forks", defaultValue = "3")
+    int forks;
+
+    @Option(
+        names = "--aot-cache",
+        description = "Train/reuse a JDK 25 Leyden cache; require it in every measurement fork")
+    boolean aotCache;
+
+    @Option(
+        names = "--output",
+        required = true,
+        description = "New directory for raw JMH, adapted results, commands and logs")
+    Path output;
+
+    @Option(names = "--display", defaultValue = "auto")
+    TerminalDisplay.Mode display;
+
+    @Option(names = "--compare")
+    Path compare;
+
+    @Option(names = "--verbose")
+    boolean verbose;
+
+    @Override
+    public Integer call() throws Exception {
+      var run = dev.elide.smh.runtime.RunConfig.read(config.toString());
+      var baseline = compare == null ? null : BenchmarkComparison.read(compare);
+      BuildConfig c = BuildConfig.read(buildConfig, home);
+      c.execution = execution;
+      c.verbose = verbose;
+      if (runtimeJavaHome != null) c.runtimeJavaHome = runtimeJavaHome.toAbsolutePath();
+      return JmhExecution.run(c, run, forks, aotCache, output, display, baseline);
     }
   }
 

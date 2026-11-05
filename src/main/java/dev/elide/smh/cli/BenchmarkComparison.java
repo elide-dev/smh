@@ -13,6 +13,7 @@ final class BenchmarkComparison {
   private record Key(String benchmark, String mode, JsonObject params, String unit) {}
 
   private final Map<Key, Double> scores = new HashMap<>();
+  private final Set<String> origins = new LinkedHashSet<>();
 
   static BenchmarkComparison read(Path file) throws Exception {
     return new BenchmarkComparison(JsonParser.parseString(Files.readString(file)).getAsJsonArray());
@@ -24,16 +25,28 @@ final class BenchmarkComparison {
       JsonObject row = element.getAsJsonObject();
       Key key = key(row);
       double score = score(row);
+      JsonObject execution = row.getAsJsonObject("smh").getAsJsonObject("execution");
+      origins.add(
+          execution == null || !execution.has("backend")
+              ? "SMH"
+              : execution.get("harness").getAsString().toUpperCase(Locale.ROOT)
+                  + " · "
+                  + execution.get("backend").getAsString()
+                  + (execution.has("aotCacheKey") ? " · Leyden" : ""));
       if (scores.putIfAbsent(key, score) != null)
         throw new IllegalArgumentException("Duplicate benchmark identity in baseline");
     }
+  }
+
+  String description() {
+    return String.join(" / ", origins);
   }
 
   private static Key key(JsonObject row) {
     JsonObject smh = row.getAsJsonObject("smh");
     if (smh == null || !"wall".equals(smh.get("backend").getAsString()))
       throw new IllegalArgumentException(
-          "Comparison requires SMH wall results; other harnesses require an explicit adapter");
+          "Comparison requires SMH wall results or explicitly adapted JMH results");
     JsonObject execution = smh.getAsJsonObject("execution");
     if (execution != null
         && execution.has("purpose")

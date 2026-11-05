@@ -4,7 +4,6 @@ package dev.elide.smh.cli;
 
 import com.google.gson.*;
 import java.io.*;
-import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.*;
@@ -38,10 +37,9 @@ final class BuildCache {
     Path root = output.resolve(".smh-cache").toAbsolutePath();
     Files.createDirectories(root);
     // Serialize publication for processes using the same output directory.
-    try (FileChannel channel =
-            FileChannel.open(
-                root.resolve("build.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-        FileLock lock = channel.lock()) {
+    try (var lockFile = new RandomAccessFile(root.resolve("build.lock").toFile(), "rw")) {
+      // Closing the file also closes its channel and releases the lock on every exit path.
+      lockFile.getChannel().lock();
       String key = identity.fingerprint(config);
       Path receipt = root.resolve(key + ".json");
       if (!rebuild && Files.isRegularFile(receipt)) {
@@ -112,6 +110,10 @@ final class BuildCache {
   }
 
   static String fingerprint(BuildConfig c) throws Exception {
+    return fingerprint(c, System.getProperty("os.name").startsWith("Windows"));
+  }
+
+  static String fingerprint(BuildConfig c, boolean windows) throws Exception {
     MessageDigest digest = MessageDigest.getInstance("SHA-256");
     add(digest, "smh-build-cache-v1");
     add(digest, c.output.toAbsolutePath().normalize().toString());
@@ -135,7 +137,7 @@ final class BuildCache {
     tool(digest, JavaCompiler.command(c.javaHome));
     // Track the host C compiler as well; additional native dependencies belong in cacheInputs.
     String cc = System.getenv().getOrDefault("CC", "gcc");
-    if (!System.getProperty("os.name").startsWith("Windows")) tool(digest, List.of(cc));
+    if (!windows) tool(digest, List.of(cc));
     return HexFormat.of().formatHex(digest.digest());
   }
 
@@ -193,9 +195,14 @@ final class BuildCache {
   }
 
   static Path executable(String name) throws IOException {
+    // The single-variable lookup honors Windows' case-insensitive environment names.
+    return executable(name, Objects.requireNonNullElse(System.getenv("PATH"), ""));
+  }
+
+  static Path executable(String name, String searchPath) throws IOException {
     Path direct = Path.of(name);
     if (direct.isAbsolute() || direct.getParent() != null) return direct.toAbsolutePath();
-    for (String directory : System.getenv().getOrDefault("PATH", "").split(File.pathSeparator)) {
+    for (String directory : searchPath.split(File.pathSeparator)) {
       Path candidate = Path.of(directory).resolve(name);
       if (Files.isRegularFile(candidate) && Files.isExecutable(candidate))
         return candidate.toAbsolutePath();

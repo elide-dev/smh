@@ -142,6 +142,19 @@ class BuildCacheTest {
         directory.resolve("tool"), BuildCache.executable(directory.resolve("tool").toString()));
     assertEquals(Path.of("./tool").toAbsolutePath(), BuildCache.executable("./tool"));
     assertThrows(IOException.class, () -> BuildCache.executable("smh-nonexistent-tool-94912"));
+    Path first = Files.createDirectory(directory.resolve("first"));
+    Path second = Files.createDirectory(directory.resolve("second"));
+    Path executable = Files.writeString(second.resolve("tool"), "tool");
+    assertTrue(executable.toFile().setExecutable(true));
+    String searchPath = first + File.pathSeparator + second;
+    assertEquals(executable, BuildCache.executable("tool", searchPath));
+    if (Files.getFileStore(first).supportsFileAttributeView("posix")) {
+      Path blocked = Files.writeString(first.resolve("tool"), "not executable");
+      Files.setPosixFilePermissions(
+          blocked, Set.of(java.nio.file.attribute.PosixFilePermission.OWNER_READ));
+      assertEquals(executable, BuildCache.executable("tool", searchPath));
+      assertThrows(IOException.class, () -> BuildCache.executable("tool", first.toString()));
+    }
   }
 
   @Test
@@ -166,6 +179,9 @@ class BuildCacheTest {
     }
     String original = BuildCache.fingerprint(c);
     assertEquals(original, BuildCache.fingerprint(c));
+    if (!windows)
+      assertNotEquals(
+          original, BuildCache.fingerprint(c, true), "Windows omits the Unix C compiler probe");
     c.verbose = true;
     assertEquals(original, BuildCache.fingerprint(c));
     c.optimization = "3";

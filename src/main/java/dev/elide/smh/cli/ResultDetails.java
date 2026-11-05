@@ -37,7 +37,7 @@ final class ResultDetails {
         result.append("    ").append(left);
         if (wide) {
           result.append(" ".repeat(Math.max(0, panel - visible(left)) + 4));
-          if (i < sequence.size()) result.append(sequence.get(i));
+          result.append(sequence.get(i));
         }
         result.append('\n');
       }

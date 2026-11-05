@@ -266,6 +266,27 @@ Simulation commands and result directories are in `simulation-evidence.json` bes
 the `.cast`, `.svg`, and `.png` captures. The previously recorded CodSpeed whole-process
 checks were not rerun for this presentation change.
 
+## Release-candidate portability follow-up
+
+Hosted validation of the visual-results candidate found a Unix-only path assertion
+and missing Windows execution of the new cache/bench tests. Those tests now use
+native command fixtures on Windows, and uncovered a case-sensitive environment-map
+lookup that missed Windows' `Path`. Tool lookup now uses Java's platform-aware
+single-variable environment lookup. Executable search also has explicit coverage
+for a non-executable file preceding a usable tool.
+
+Cache locking remains scoped to the complete lookup/build/publication operation.
+The owning file closes its channel and releases the lock on success and failure;
+existing failure/rebuild tests exercise subsequent acquisition. This does not add
+cross-process stress qualification. Both chart panels have equal height, so their
+join no longer contains an unreachable shorter-panel branch.
+
+The follow-up local suite passes 116 tests with no skips: 2466/2468 production
+lines (99.92%), 1456/1463 branches (99.52%), and the mathematical kernel remains
+100%. The CLI logging policy has a direct test for suppressed INFO and retained
+WARNING/ERROR routes. Hosted results remain tracked on PR #10; local test results
+are not a substitute for that platform matrix.
+
 ## Repository and release integrity
 
 The public repository has secret scanning/push protection, required checks,

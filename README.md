@@ -3,6 +3,16 @@
 
 ![SMH — SubstrateVM Microbenchmark Harness](docs/assets/smh-repo-banner.png)
 
+[![CI](https://github.com/elide-dev/smh/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/elide-dev/smh/actions/workflows/quality.yml)
+[![Release](https://img.shields.io/github/v/release/elide-dev/smh)](https://github.com/elide-dev/smh/releases/latest)
+[![Codecov](https://codecov.io/gh/elide-dev/smh/branch/main/graph/badge.svg)](https://codecov.io/gh/elide-dev/smh)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/elide-dev/smh/badge)](https://scorecard.dev/viewer/?uri=github.com/elide-dev/smh)
+[![License: Apache-2.0 OR MIT](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue)](LICENSE)
+[![Discord](https://img.shields.io/discord/1119121740161884252?logo=discord&logoColor=white&label=Discord)](https://elide.dev/discord)
+[![Built with Elide](https://img.shields.io/badge/built%20with-Elide-8A2BE2)](https://elide.help)
+![Java 25+](https://img.shields.io/badge/-Java%2025%2B-blue.svg?logo=openjdk&logoColor=white)
+![Rust 2024](https://img.shields.io/badge/-Rust%202024-orange.svg?logo=rust&logoColor=white)
+
 # SMH
 
 **Write Java benchmarks. Build native executables. Measure wall time or simulated instructions.**

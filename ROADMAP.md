@@ -280,6 +280,14 @@ architecture or running under emulation does not qualify native timing.
   AOT, HotSpot, C2, and Crema/Ristretto; monolithic and layered Callgrind checks;
   58/140-column terminal recordings. Contracts and limits: [Assurance](docs/ASSURANCE.md#startup-and-soak-experiments).
 
+- [x] F07-12: Interleave startup command candidates and parameter variants; overlay
+  compatible cases on shared charts and redraw live snapshots before publishing
+  one final report. Contracts: [Experiment modes](docs/EXPERIMENTS.md#interleaved-command-comparisons).
+  Evidence: 163 JVM tests, 99% coverage gates, and native PTY checks at 40/58/100/140
+  columns, including rotating invoice launches, command comparisons, failure and
+  SIGINT cleanup. Receipts: `build/variant-validation/`. Statistical winner/regression
+  decisions remain tracked separately in F07-06.
+
 ## M8 — security, releases, and OpenSSF
 
 - [ ] F08-01: Document security reporting, threat model, supported versions, governance, reviews, and contribution rules.

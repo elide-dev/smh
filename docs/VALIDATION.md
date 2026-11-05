@@ -179,3 +179,10 @@ Wall checks also place a deliberate delay after the endpoint. They do not
 establish cross-engine equivalence or performance accuracy. JVM tests separately
 exercise deterministic timing, lifecycle failures, malformed simulator dumps,
 comparison identity, and chart widths from 40 to 160 columns.
+
+The native terminal suite also runs direct command candidates at 40, 58, 100 and
+140 columns, verifies round/slot ordering and retained timings, checks the final
+fastest-observed comparison record, and exercises failure after a live frame has
+opened. It checks alternate-screen restoration and absence of transient progress
+in the final report. The ordinary invoice runs verify grouped charts, raw sample
+retention and the same final-screen lifecycle.

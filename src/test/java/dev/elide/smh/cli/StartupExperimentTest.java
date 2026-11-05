@@ -318,11 +318,11 @@ class StartupExperimentTest {
           System.setErr(original);
         }
         String rendered = screen.toString();
-        int chart = rendered.indexOf("Launch distribution");
-        int progress = rendered.lastIndexOf("Startup ·");
-        assertTrue(progress >= 0 && progress < chart, rendered);
-        assertTrue(rendered.substring(progress, chart).contains("\r\033[2K"), rendered);
-        assertFalse(rendered.substring(chart).contains("Startup ·"));
+        int restored = rendered.lastIndexOf("\033[?1049l");
+        assertTrue(rendered.contains("\033[?1049h"), rendered);
+        assertTrue(restored > rendered.indexOf("Startup ·"), rendered);
+        assertTrue(rendered.substring(restored).contains("Launch distribution"));
+        assertFalse(rendered.substring(restored).contains("Startup ·"));
         assertEquals(
             100,
             rows.get(0).getAsJsonObject().getAsJsonObject("primaryMetric").get("score").getAsInt());

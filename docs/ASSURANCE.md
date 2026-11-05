@@ -441,9 +441,10 @@ JVM tests exercise independent clock traces, persistent trial state, logical
 operation normalization, partial final windows, lifecycle failures, duplicate or
 missing readiness notifications, timeouts, malformed simulator dumps, comparison
 identity, and charts from 40 to 160 columns. The final JVM suite passes all
-157 tests with no skips: production line coverage is 3,866/3,880 (99.64%), branch
-coverage is 2,330/2,352 (99.06%), and mathematical-kernel line and branch coverage
-are 100%. Final coverage and native validation receipts are retained under `build/experiment-validation/run-20261105/`; individual
+163 tests with no skips: production line coverage is 4,221/4,235 (99.67%), branch
+coverage is 2,491/2,515 (99.05%), and mathematical-kernel line and branch coverage
+are 100%. Current coverage is retained under `build/variant-validation/`. Earlier
+mode validation receipts are retained under `build/experiment-validation/run-20261105/`; individual
 runs, commands, artifact hashes, raw counters, and failure controls are under
 `build/experiment-tests/`. The receipt distinguishes final checks from earlier
 failed probes. Terminal examples in the guide are short validation captures,
@@ -497,3 +498,45 @@ failed log writes without masking the original failure, terminal control-charact
 sanitization, plain/colored output, and native compiler-log retention with explicit
 verbose replay. Local evidence is under `build/error-validation/` and
 `build/terminal-tests/`; no hosted CI pass is implied.
+
+## Interleaved variants and live reports
+
+Startup scheduling now runs one process per case per round, rotating the first
+case each round. Each observation retains its round and slot, raw timing and PID;
+per-launch files and `partial-results.json` survive failure. Command candidates
+reuse the parent-side process launcher and its timeout/cleanup path, with exit as
+the only supported endpoint and wall time as the only supported backend. The
+measurement includes process launch and exit detection overhead. The command's
+own compilation, fixture work and teardown are included. Filesystem caches and
+host state remain uncontrolled; rotating order does not establish statistical
+independence or eliminate carryover effects.
+
+`VariantChartsTest` checks a prescribed two-case, three-round schedule against an
+independent expected order, checks snapshot persistence before the next launch,
+and exercises shared-scale grouping, overlap markers, constant and invalid
+series, more than five variants, and narrow legends. Incompatible endpoints,
+backends, execution identities and simulator models remain separate groups.
+`TerminalDisplayTest` uses a child waiting for a display acknowledgement to check
+that live snapshots arrive before child exit. The final report is rendered after
+restoring the transient terminal screen. No report rendering runs inside a
+measured invocation or active startup child.
+
+The winner label is explicitly **fastest observed**, based on separate arithmetic
+means. No confidence interval, multiplicity adjustment, practical effect threshold
+or significance decision is implemented. F07-06 remains open. Parameter-size
+variants receive no winner label. Histograms and histories share axes without
+pooling the underlying samples. Large live reports are clipped to the viewport;
+the final report and raw data retain every case.
+
+Final verification for this change: all 163 JVM tests pass without skips, with
+4,221/4,235 production lines (99.67%), 2,491/2,515 branches (99.05%), and 100% of
+the mathematical kernel covered. Lint and all 31 Python tool tests pass. The
+native CLI was rebuilt on Linux AMD64 with Native Image 25.0.4.1; real PTY runs
+verify command candidates and invoice startup at 40/58/100/140 columns, rotated
+round positions, distinct invoice launch PIDs, retained samples, clean final
+reports, redirected JSON, failed candidates and SIGINT restoration. A separate
+100-column capture uses 20 launches per invoice size. Commands, raw reports,
+recordings, coverage and artifact hashes are retained in
+`build/variant-validation/`, with the broader native terminal recordings under
+`build/terminal-tests/`. These are behavior and presentation checks, not evidence
+that one workload or execution engine is faster in general.

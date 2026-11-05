@@ -334,3 +334,14 @@ precede it. Successful stdout and delegated-process output are unchanged.
 | `SMH-BUILD-FAILED` | Open the compiler log and fix its first error; use `--verbose` to replay diagnostics. |
 | `SMH-IO` | Inspect diagnostic/build/launch logs and fix the underlying I/O or tool failure. |
 | `SMH-INTERNAL` | Retain the diagnostic file and report a minimal reproduction with the SMH version. |
+
+For direct command startup comparisons, put SMH options first and separate argv
+with repeated `--candidate`:
+
+```sh
+smh --mode startup --launches 20 --candidate elide run app.js --candidate bun run app.js
+```
+
+Candidates run serially in rotating rounds; their output goes to per-launch log
+files. The final report overlays distributions and names the fastest observed
+mean. See [contracts, limits and live charts](EXPERIMENTS.md#interleaved-command-comparisons).

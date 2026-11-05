@@ -24,7 +24,7 @@ import picocli.CommandLine.*;
       Main.Bench.class,
       Main.Jmh.class
     })
-public class Main implements Runnable {
+public class Main implements Callable<Integer> {
   public static void main(String[] args) {
     System.exit(execute(args));
   }
@@ -59,9 +59,25 @@ public class Main implements Runnable {
 
   @Spec picocli.CommandLine.Model.CommandSpec spec;
 
+  @Mixin ExperimentOptions experiment = new ExperimentOptions();
+
+  @Option(
+      names = "--candidate",
+      parameterConsumer = StartupCandidates.Arguments.class,
+      description = "Command argv, ending at the next --candidate; put all SMH options first")
+  java.util.List<String> candidates = new java.util.ArrayList<>();
+
+  @Option(names = "--display", defaultValue = "auto")
+  TerminalDisplay.Mode display = TerminalDisplay.Mode.auto;
+
   @Override
-  public void run() {
+  public Integer call() throws Exception {
+    if (!candidates.isEmpty()) return StartupCandidates.run(candidates, experiment, display);
+    if (experiment.mode != null)
+      throw new IllegalArgumentException(
+          "Use --candidate commands or smh bench --mode " + experiment.mode);
     spec.commandLine().usage(System.out);
+    return 0;
   }
 
   @Singleton

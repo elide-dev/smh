@@ -72,6 +72,49 @@ class CliTest {
   }
 
   @Test
+  void rootCommandCandidatesRunWithDefaultsAndPlainJson() throws Exception {
+    Path output = directory.resolve("candidates");
+    Output result =
+        invoke(
+            "--mode",
+            "startup",
+            "--output",
+            output.toString(),
+            "--candidate",
+            java(),
+            "-version",
+            "--candidate",
+            java(),
+            "-version");
+    assertEquals(0, result.status, result.stderr);
+    var rows = com.google.gson.JsonParser.parseString(result.stdout).getAsJsonArray();
+    assertEquals(10, rows.get(0).getAsJsonObject().get("forks").getAsInt());
+    assertFalse(result.stderr.contains("\033"));
+    Output styled =
+        invoke(
+            "--mode",
+            "startup",
+            "--launches",
+            "1",
+            "--display",
+            "tui",
+            "--output",
+            directory.resolve("styled-candidates").toString(),
+            "--candidate",
+            java(),
+            "-version",
+            "--candidate",
+            java(),
+            "-version");
+    assertEquals(0, styled.status, styled.stderr);
+    assertEquals(2, com.google.gson.JsonParser.parseString(styled.stdout).getAsJsonArray().size());
+    assertTrue(styled.stderr.contains("Fastest observed"));
+    assertFalse(styled.stderr.contains("\033[?1049h"));
+    assertEquals(1, invoke("--mode", "startup").status);
+    assertEquals(2, invoke("--candidate").status);
+  }
+
+  @Test
   void errorsAreConciseAndJsonIsAvailableBeforeOrAfterTheSubcommand() throws Exception {
     Path missing = directory.resolve("missing.json");
     Output human = invoke("build", "--config", missing.toString());

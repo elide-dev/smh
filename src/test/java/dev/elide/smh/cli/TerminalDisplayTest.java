@@ -484,6 +484,64 @@ class TerminalDisplayTest {
   }
 
   @Test
+  void liveCaseIsRenderedBeforeTheChildCanFinishAndFinalReportIsPrintedOnce() throws Exception {
+    String row =
+        "{\"benchmark\":\"stream.first\",\"params\":{},\"mode\":\"avgt\","
+            + "\"vmName\":\"Substrate VM\",\"jdkVersion\":\"25\","
+            + "\"primaryMetric\":{\"score\":1.5,\"scoreUnit\":\"ns/op\",\"rawData\":[[1,2]]}}";
+    Path acknowledgement = directory.resolve("visible");
+    var bytes = new ByteArrayOutputStream();
+    var display =
+        new PrintStream(bytes) {
+          @Override
+          public void write(byte[] buffer, int offset, int length) {
+            super.write(buffer, offset, length);
+            if (bytes.toString().contains("stream.first")) {
+              try {
+                Files.writeString(acknowledgement, "visible before exit");
+              } catch (IOException failure) {
+                throw new UncheckedIOException(failure);
+              }
+            }
+          }
+        };
+    String literal = new com.google.gson.Gson().toJson(row);
+    String ack = new com.google.gson.Gson().toJson(acknowledgement.toString());
+    var stdout = new ByteArrayOutputStream();
+    assertEquals(
+        0,
+        TerminalDisplay.animated(
+            child(
+                "var folder = java.nio.file.Path.of(System.getenv(\"SMH_RESULT_STREAM\"));"
+                    + "java.nio.file.Files.writeString(folder.resolve(\"pending.json\"), "
+                    + literal
+                    + ");java.nio.file.Files.move(folder.resolve(\"pending.json\"),"
+                    + " folder.resolve(\"0.json\"));for (int i=0; i<100 &&"
+                    + " !java.nio.file.Files.exists(java.nio.file.Path.of("
+                    + ack
+                    + ")); i++) Thread.sleep(50);"
+                    + "if (!java.nio.file.Files.exists(java.nio.file.Path.of("
+                    + ack
+                    + "))) System.exit(9);"
+                    + "System.out.print(\"[\" + "
+                    + literal
+                    + " + \"]\");"),
+            "stream",
+            true,
+            null,
+            display));
+    assertTrue(bytes.toString().contains("\033[?1049h"));
+    assertTrue(bytes.toString().contains("\033[?1049l"));
+    assertEquals(2, bytes.toString().split("stream.first", -1).length - 1);
+    assertEquals(1, bytes.toString().split("JDK 25", -1).length - 1);
+    assertTrue(bytes.toString().indexOf("stream.first") < bytes.toString().indexOf("Complete"));
+    assertEquals(
+        Path.of("build/log.txt").toString(),
+        TerminalDisplay.path(Path.of("build/log.txt").toAbsolutePath()));
+    TerminalDisplay.footer("not json", display, null);
+  }
+
+  @Test
   void throughputComparisonHasItsOwnDirectionAndEnvironmentIsDeduplicated() {
     var row = BenchmarkComparisonTest.row(100);
     row.addProperty("mode", "thrpt");

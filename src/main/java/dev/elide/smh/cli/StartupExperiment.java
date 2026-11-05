@@ -252,10 +252,12 @@ final class StartupExperiment {
     JsonArray cases = JsonParser.parseString(discovered.result).getAsJsonArray();
     if (cases.isEmpty()) throw new IOException("Startup discovery returned no cases");
     JsonArray results = new JsonArray();
-    int caseIndex = 0;
-    for (JsonElement value : cases) {
-      JsonObject description = value.getAsJsonObject();
-      Path caseDirectory = Files.createDirectory(directory.resolve("case-" + caseIndex++));
+    List<JsonObject> selections = new ArrayList<>();
+    List<JsonArray> observed = new ArrayList<>(), rawScores = new ArrayList<>();
+    List<JsonObject> models = new ArrayList<>();
+    for (int caseIndex = 0; caseIndex < cases.size(); caseIndex++) {
+      JsonObject description = cases.get(caseIndex).getAsJsonObject();
+      Files.createDirectory(directory.resolve("case-" + caseIndex));
       JsonObject selected = effective.deepCopy();
       selected.addProperty(
           "include", "^" + Pattern.quote(description.get("benchmark").getAsString()) + "$");
@@ -270,80 +272,115 @@ final class StartupExperiment {
                 params.add(entry.getKey(), values);
               });
       selected.add("params", params);
-      JsonArray observations = new JsonArray(), scores = new JsonArray();
-      JsonObject model = null;
-      BigDecimal sum = BigDecimal.ZERO;
+      selections.add(selected);
+      observed.add(new JsonArray());
+      rawScores.add(new JsonArray());
+      models.add(null);
+      results.add(JsonNull.INSTANCE);
+    }
+    try (var live =
+        new LiveReport(System.err, TerminalDisplay.width(System.getenv()), visual && terminal)) {
       for (int i = 0; i < count; i++) {
-        Path launchDirectory = Files.createDirectory(caseDirectory.resolve("launch-" + i));
-        Path run = Files.writeString(launchDirectory.resolve("run.json"), selected.toString());
-        ProcessBuilder process = copy(template, config, run);
-        process.environment().remove("SMH_STARTUP_DISCOVER");
-        if (simulation)
-          process.command(simulationCommand(valgrind, process.command(), launchDirectory, exit));
-        Launch launch =
-            launcher.execute(process, launchDirectory, timeout, UUID.randomUUID().toString(), exit);
-        JsonArray child = JsonParser.parseString(launch.result).getAsJsonArray();
-        if (child.size() != 1 || !child.get(0).equals(description))
-          throw new IOException("Startup child identity does not match discovery");
-        JsonObject observation;
-        BigDecimal score;
-        if (simulation) {
-          observation = importLaunch(launchDirectory, exit);
-          JsonObject currentModel = new JsonObject();
-          currentModel.add("cacheModel", observation.get("cacheModel"));
-          currentModel.add("creator", observation.get("creator"));
-          currentModel.addProperty(
-              "counterPolicy", "process-summary-including-unattributed-events");
-          currentModel.addProperty("architecture", System.getProperty("os.arch"));
-          if (model != null && !model.equals(currentModel))
-            throw new IOException("Startup simulator model changed between launches");
-          model = currentModel;
-          score = new BigDecimal(observation.getAsJsonObject("events").get("Ir").getAsString());
-        } else {
-          observation = new JsonObject();
-          observation.addProperty("endpointNanos", launch.endpointNanos);
-          observation.addProperty("completionNanos", launch.completionNanos);
-          score = BigDecimal.valueOf(launch.endpointNanos, 6);
-        }
-        observation.addProperty("processId", launch.processId);
-        observation.addProperty("index", i);
-        observation.addProperty("score", score);
-        observations.add(observation);
-        scores.add(score);
-        sum = sum.add(score);
-        Files.writeString(launchDirectory.resolve("observation.json"), observation.toString());
-        if (visual && terminal) {
-          System.err.print("\r\033[2K  Startup · launch " + (i + 1) + "/" + count);
-          System.err.flush();
+        for (int slot = 0; slot < cases.size(); slot++) {
+          // Rotate first position each round; every case runs once before any repeats.
+          int caseIndex = (slot + i) % cases.size();
+          JsonObject description = cases.get(caseIndex).getAsJsonObject();
+          Path caseDirectory = directory.resolve("case-" + caseIndex);
+          JsonObject selected = selections.get(caseIndex);
+          JsonArray observations = observed.get(caseIndex), scores = rawScores.get(caseIndex);
+          JsonObject model = models.get(caseIndex);
+          Path launchDirectory = Files.createDirectory(caseDirectory.resolve("launch-" + i));
+          Path run = Files.writeString(launchDirectory.resolve("run.json"), selected.toString());
+          ProcessBuilder process = copy(template, config, run);
+          process.environment().remove("SMH_STARTUP_DISCOVER");
+          if (simulation)
+            process.command(simulationCommand(valgrind, process.command(), launchDirectory, exit));
+          Launch launch =
+              launcher.execute(
+                  process, launchDirectory, timeout, UUID.randomUUID().toString(), exit);
+          JsonArray child = JsonParser.parseString(launch.result).getAsJsonArray();
+          if (child.size() != 1 || !child.get(0).equals(description))
+            throw new IOException("Startup child identity does not match discovery");
+          JsonObject observation;
+          BigDecimal score;
+          if (simulation) {
+            observation = importLaunch(launchDirectory, exit);
+            JsonObject currentModel = new JsonObject();
+            currentModel.add("cacheModel", observation.get("cacheModel"));
+            currentModel.add("creator", observation.get("creator"));
+            currentModel.addProperty(
+                "counterPolicy", "process-summary-including-unattributed-events");
+            currentModel.addProperty("architecture", System.getProperty("os.arch"));
+            if (model != null && !model.equals(currentModel))
+              throw new IOException("Startup simulator model changed between launches");
+            model = currentModel;
+            models.set(caseIndex, model);
+            score = new BigDecimal(observation.getAsJsonObject("events").get("Ir").getAsString());
+          } else {
+            observation = new JsonObject();
+            observation.addProperty("endpointNanos", launch.endpointNanos);
+            observation.addProperty("completionNanos", launch.completionNanos);
+            score = BigDecimal.valueOf(launch.endpointNanos, 6);
+          }
+          observation.addProperty("processId", launch.processId);
+          observation.addProperty("index", i);
+          observation.addProperty("round", i);
+          observation.addProperty("slot", slot);
+          observation.addProperty("score", score);
+          observations.add(observation);
+          scores.add(score);
+          Files.writeString(launchDirectory.resolve("observation.json"), observation.toString());
+          BigDecimal sum = BigDecimal.ZERO;
+          for (JsonElement sample : scores) sum = sum.add(sample.getAsBigDecimal());
+          JsonObject row = description.deepCopy(),
+              metric = new JsonObject(),
+              smh = new JsonObject();
+          row.addProperty("mode", "startup");
+          row.addProperty("forks", scores.size());
+          metric.addProperty(
+              "score", sum.divide(BigDecimal.valueOf(scores.size()), MathContext.DECIMAL128));
+          metric.addProperty("scoreUnit", simulation ? "instructions/launch" : "ms/launch");
+          JsonArray raw = new JsonArray();
+          raw.add(scores);
+          metric.add("rawData", raw);
+          row.add("primaryMetric", metric);
+          smh.addProperty("schemaVersion", 1);
+          smh.addProperty("backend", simulation ? "callgrind" : "wall");
+          smh.addProperty("experimentMode", "startup");
+          smh.addProperty("endpoint", until);
+          smh.addProperty(
+              "boundary",
+              simulation
+                  ? "guest-process-entry-to-endpoint-all-threads"
+                  : exit
+                      ? "parent-launch-to-process-exit"
+                      : "parent-launch-to-notification-receipt");
+          smh.addProperty("cacheState", "fresh-process; filesystem-cache-uncontrolled");
+          smh.addProperty("accuracy", "unqualified");
+          smh.addProperty("schedule", "rotating-rounds");
+          smh.add("observations", observations);
+          if (model != null) smh.add("simulationModel", model);
+          String identity = template.environment().get("SMH_EXECUTION_IDENTITY");
+          if (identity != null) smh.add("execution", JsonParser.parseString(identity));
+          row.add("smh", smh);
+          results.set(caseIndex, row);
+          Files.writeString(caseDirectory.resolve("result.json"), row.toString());
+          JsonArray snapshot = new JsonArray();
+          for (JsonElement result : results)
+            if (!result.isJsonNull()) snapshot.add(result.deepCopy());
+          Files.writeString(directory.resolve("partial-results.json"), snapshot.toString());
+          live.update(
+              snapshot,
+              "Startup · round "
+                  + (i + 1)
+                  + "/"
+                  + count
+                  + " · case "
+                  + (slot + 1)
+                  + "/"
+                  + cases.size());
         }
       }
-      JsonObject row = description.deepCopy(), metric = new JsonObject(), smh = new JsonObject();
-      row.addProperty("mode", "startup");
-      row.addProperty("forks", count);
-      metric.addProperty("score", sum.divide(BigDecimal.valueOf(count), MathContext.DECIMAL128));
-      metric.addProperty("scoreUnit", simulation ? "instructions/launch" : "ms/launch");
-      JsonArray raw = new JsonArray();
-      raw.add(scores);
-      metric.add("rawData", raw);
-      row.add("primaryMetric", metric);
-      smh.addProperty("schemaVersion", 1);
-      smh.addProperty("backend", simulation ? "callgrind" : "wall");
-      smh.addProperty("experimentMode", "startup");
-      smh.addProperty("endpoint", until);
-      smh.addProperty(
-          "boundary",
-          simulation
-              ? "guest-process-entry-to-endpoint-all-threads"
-              : exit ? "parent-launch-to-process-exit" : "parent-launch-to-notification-receipt");
-      smh.addProperty("cacheState", "fresh-process; filesystem-cache-uncontrolled");
-      smh.addProperty("accuracy", "unqualified");
-      smh.add("observations", observations);
-      if (model != null) smh.add("simulationModel", model);
-      String identity = template.environment().get("SMH_EXECUTION_IDENTITY");
-      if (identity != null) smh.add("execution", JsonParser.parseString(identity));
-      row.add("smh", smh);
-      results.add(row);
-      Files.writeString(caseDirectory.resolve("result.json"), row.toString());
     }
     if (visual && terminal) System.err.print("\r\033[2K");
     String json = new GsonBuilder().setPrettyPrinting().create().toJson(results);

@@ -86,7 +86,7 @@ be interrupted safely, so the duration can overshoot. Single-shot scoring is
 rejected. Trial state persists across windows; existing iteration/invocation
 fixture semantics still apply.
 
-The budget and horizontal axis use elapsed phase time, including fixtures and
+The budget and individual-case timeline use elapsed phase time, including fixtures and
 between-window harness work. Each window's score retains the ordinary timed
 invocation/batch boundary. The two scopes are recorded separately. A min–max
 trace retains the range of every window falling in a screen column; it does not
@@ -138,8 +138,8 @@ Copyable JSON policies are provided for [startup](../examples/startup-run.json),
 
 Build diagnostics and cache decisions are saved in the printed build-log location;
 `--verbose` replays them before results. Compiler subprocesses retain their own
-full logs, referenced by that build log. Startup launch progress occupies a temporary
-terminal line, cleared before the complete report is printed. Redirected output
+full logs, referenced by that build log. Startup progress and charts occupy a temporary
+terminal view, cleared before the complete report is printed. Redirected output
 contains no progress updates. Messages use a two-space margin and plot contents
 use a four-space inset.
 
@@ -151,12 +151,103 @@ remain visible.
 ## Terminal examples
 
 These captures use short validation runs to show the layouts, not to compare
-engine performance. The startup view retains the launch histogram and separates
-post-endpoint work on a shared scale:
+engine performance. The startup view overlays invoice sizes on a shared
+distribution and launch-order chart (20 fresh launches per size):
 
-![Startup launch histogram, launch-order plot, and endpoint bars](assets/startup-mode.png)
+![Invoice startup variants with overlaid histograms and launch-order points](assets/startup-mode.png)
 
 The soak view puts elapsed time first, keeps the window distribution alongside
 it, and summarizes early versus late observations without hiding any windows:
 
 ![Soak timeline, window histogram, and early/late medians](assets/soak-mode.png)
+
+## Interleaved command comparisons
+
+Compare complete command startup on the same host:
+
+```sh
+smh --mode startup --launches 20 --output build/startup-compare \
+  --candidate elide run app.js \
+  --candidate bun run app.js
+```
+
+Put **all SMH options before the first `--candidate`**. Each candidate consumes
+argv through the next `--candidate` or the end of the command line. Quote an
+individual argument containing spaces normally. SMH executes argv directly;
+there is no shell expansion, pipeline, or implicit shell startup. Explicitly
+invoke a shell if that is the program you intend to measure. The literal
+`--candidate` token is reserved as a separator.
+
+Command comparisons currently use wall time through successful process exit.
+`--until exit` is implicit. For instrumented ready/first-result or Callgrind
+measurements, use `smh bench`. Commands must finish without interactive input and wait for their subprocesses;
+daemonizing/background commands are outside this measurement contract.
+Prepare builds and caches before starting the comparison if compilation should
+not be included: everything the command does before exit is timed. Each command
+inherits the current working directory and environment. No cache flushing or
+warmup launches are performed.
+
+Each round runs every candidate once, serially; the first candidate rotates on
+successive rounds. The same scheduling applies to discovered `smh bench` startup
+cases, including invoice sizes. Round and position are retained per observation.
+This reduces fixed ordering bias, but does not guarantee removal of thermal,
+filesystem-cache, or other host drift effects.
+
+The final command comparison names the **fastest observed** arithmetic mean and
+its ratio against the next candidate. This is descriptive, not a statistical
+significance or equivalence claim. Tied means have no observed winner. Different
+invoice sizes are workload variants and receive no winner declaration.
+`comparison.json` records the analysis policy; `results.json` retains separate
+candidate samples and command identity. Each launch has stdout/stderr logs,
+command argv and its observation. Failures stop the experiment, preserve launch
+failure details and completed observations in `partial-results.json`, and do not
+produce a successful comparison.
+
+## Shared variant charts and live updates
+
+Cases with the same benchmark, mode, measurement unit, endpoint and compatible
+execution/measurement identity share a chart. Parameter values identify the
+colored series: for the invoice sample, `lines=10` and `lines=1000` appear on the
+same startup distribution and launch-order plot. No samples are pooled and no
+per-series rescaling is performed. Overlaid histograms use common bins and count
+scale; histories share the score scale and show sample order (window index for
+grouped soak cases, launch index for startup). Individual soak cards retain their
+elapsed-time timeline. Matching colors and shapes identify each
+series; a neutral diamond marks overlapping series rather than hiding one behind
+another. More than five variants use successive panels with the same axes.
+
+The interactive terminal view redraws after each startup launch and after each
+completed ordinary benchmark case. The temporary view uses the terminal's
+alternate screen, then restores the terminal and prints the final report once.
+Narrow terminals keep the same charts with fewer columns; the live viewport may
+show only the first part of a long report, while the final report includes every
+case. Redirected/plain output keeps machine-readable JSON and never emits live
+cursor controls. `--display tui` explicitly requests chart styling; live redraw
+still requires an interactive terminal.
+
+The architecture has three boundaries:
+
+1. Collectors persist raw observations before publishing a result snapshot.
+   Startup publishes at launch granularity; the ordinary runner already publishes
+   completed case files through `SMH_RESULT_STREAM`.
+2. `VariantCharts` groups compatible rows and renders distributions and histories
+   from their separate raw data. It does not time work or decide statistical
+   significance. Saved-baseline comparisons retain their existing separate view.
+3. `LiveReport` consumes snapshots, owns transient screen state and restores it on
+   completion, failure or shutdown. Final rendering uses the same chart renderer,
+   outside measured work. No rendering code runs inside a benchmark invocation.
+   Ordinary case snapshots are consumed while the runner may already be executing
+   the next case, so live display still uses host resources. Use `--display plain`
+   when minimizing this observer load matters. Startup redraw happens between
+   child processes.
+
+```mermaid
+flowchart LR
+  A[Startup launch observations] --> C[Persisted result snapshots]
+  B[Completed benchmark cases] --> C
+  C --> D[Compatible variant groups]
+  D --> E[Shared chart renderer]
+  E --> F[Transient live frame]
+  E --> G[Final report]
+  C --> H[Raw JSON and launch logs]
+```

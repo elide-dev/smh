@@ -12,6 +12,7 @@ import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -100,25 +101,121 @@ def retained_report(screen, configured_output, iterations):
 
 
 def histogram(screen, width):
-    plain = ANSI.sub("", screen)
-    for expected in ("Iterations", "Iteration score", "median", "p99", "µs/op", "└"):
-        require(expected in plain, f"Missing histogram content: {expected}")
-    require(any(block in plain for block in "▁▂▃▄▅▆▇█"), "Missing histogram bins")
-    require(("Run order" in plain) == (width >= 110), "Incorrect run-order chart width threshold")
-    require("iterations" in plain, "Histogram must name iteration scores")
-    require("CV" not in plain, "Default results should keep statistics compact")
+    require("\x1b[?1049h" in screen, "Live report must use a temporary screen")
+    require("\x1b[?1049l" in screen, "Final report must restore the normal screen")
+    plain = ANSI.sub("", screen.rsplit("\x1b[?1049l", 1)[-1])
+    for expected in ("Distribution", "Sample order", "lines=10", "lines=1000", "µs/op", "n="):
+        require(expected in plain, f"Missing shared chart content: {expected}")
+    require("█" in plain, "Missing histogram bins")
     for line in plain.splitlines():
-        if "│" in line or "└" in line:
+        if line.startswith("    "):
             require(len(line) <= width, f"Chart exceeds {width} columns: {line}")
-    require(
-        plain.index("Iteration score") < plain.index("Complete"),
-        "Completed cases must render before the process reports completion",
-    )
     require(plain.count("JDK ") == 1, "Environment must appear once at the end")
     require("not-assessed" not in plain, "Unassessed states must stay out of the display")
-    require("NATIVE BENCHMARK LAB" not in plain, "Obsolete banner must not return")
     require("38;2;" in screen, "Expected 24-bit color")
     require("\x1b[?25h" in screen, "Completed results must restore the cursor")
+
+
+def candidate_cases(cli, output):
+    """Real command argv, rotating launches and transient frames survive native packaging."""
+    for width in (40, 58, 100, 140):
+        target = Path(tempfile.mkdtemp(prefix="candidate-", dir=output)) / "run"
+        command = [
+            str(cli),
+            "--mode",
+            "startup",
+            "--launches",
+            "3",
+            "--display",
+            "tui",
+            "--output",
+            str(target),
+            "--candidate",
+            sys.executable,
+            "-c",
+            "import time; time.sleep(.01)",
+            "--candidate",
+            sys.executable,
+            "-c",
+            "import time; time.sleep(.03)",
+        ]
+        status, screen = terminal(command, output / f"candidates-{width}.cast", width=width)
+        require(status == 0, screen)
+        require(
+            "\x1b[?1049h" in screen and "\x1b[?1049l" in screen, "Missing live screen lifecycle"
+        )
+        final = ANSI.sub("", screen.rsplit("\x1b[?1049l", 1)[-1])
+        require("Startup · round" not in final, "Progress leaked into final report")
+        for expected in (
+            "Distribution",
+            "Sample order",
+            "Fastest observed",
+            "significance not assessed",
+        ):
+            require(expected in final, f"Missing candidate result: {expected}")
+        rows = json.loads((target / "results.json").read_bytes())
+        require(len(rows) == 2)
+        for index, row in enumerate(rows):
+            observations = row["smh"]["observations"]
+            require(len(observations) == 3)
+            require([o["slot"] for o in observations] == [(index - r) % 2 for r in range(3)])
+            require(all(o["endpointNanos"] == o["completionNanos"] > 0 for o in observations))
+        require(
+            json.loads((target / "comparison.json").read_bytes())["significanceAssessed"] is False
+        )
+    failed = Path(tempfile.mkdtemp(prefix="candidate-failure-", dir=output)) / "run"
+    status, screen = terminal(
+        [
+            str(cli),
+            "--mode",
+            "startup",
+            "--display",
+            "tui",
+            "--output",
+            str(failed),
+            "--candidate",
+            sys.executable,
+            "-c",
+            "pass",
+            "--candidate",
+            sys.executable,
+            "-c",
+            "raise SystemExit(7)",
+        ],
+        output / "candidate-failure.cast",
+    )
+    require(status != 0 and "\x1b[?1049l" in screen, "Failure must restore the live screen")
+    require(
+        not (failed / "results.json").exists(),
+        "Failed comparison must not produce a successful report",
+    )
+    require((failed / "partial-results.json").is_file())
+    require((failed / "candidate-1/launch-0/failure.json").is_file())
+    interrupted = Path(tempfile.mkdtemp(prefix="candidate-interrupt-", dir=output)) / "run"
+    status, screen = terminal(
+        [
+            str(cli),
+            "--mode",
+            "startup",
+            "--display",
+            "tui",
+            "--output",
+            str(interrupted),
+            "--candidate",
+            sys.executable,
+            "-c",
+            "pass",
+            "--candidate",
+            sys.executable,
+            "-c",
+            "import time; time.sleep(20)",
+        ],
+        output / "candidate-interrupt.cast",
+        interrupt=True,
+    )
+    require(status != 0, "Interrupted startup must not report success")
+    require("\x1b[?1049l" in screen, "SIGINT must restore the alternate screen")
+    require(not (interrupted / "results.json").exists())
 
 
 def error_cases(cli, output):
@@ -226,6 +323,7 @@ def main():
     output = ROOT / "build/terminal-tests"
     output.mkdir(parents=True, exist_ok=True)
     error_cases(cli, output)
+    candidate_cases(cli, output)
     config = output / "run.json"
     configured_output = output / "configured-output.json"
     config.write_text(

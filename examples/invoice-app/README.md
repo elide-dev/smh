@@ -83,7 +83,7 @@ size for the full duration after warmup. Histograms retain the distribution;
 launch order and soak timelines retain history. See [Experiment modes](../../docs/EXPERIMENTS.md)
 for simulation commands and exact measurement boundaries.
 
-Launch progress clears before startup results appear. Build/cache details stay in
+The live view clears before the final startup report appears. Build/cache details stay in
 `build.log` under the experiment directory; `--verbose` prints them before results.
 The terminal rounds numbers for readability; JSON retains exact observations and
 qualification metadata.
@@ -131,3 +131,16 @@ CodSpeed, compiler failures, empty measurements, or instrument failures fail the
 Commands, diagnostics, artifact hashes, and raw measurements are retained under
 `build/invoice-tests/` and `build/codspeed-tests/`. CI runs the same check on Linux
 amd64 and retains artifacts even on failure.
+
+Startup variants now run in interleaved rounds and share colored distribution
+and launch-order charts. From this directory:
+
+```sh
+elide run assemble
+smh bench --mode startup --launches 20 --until first-result
+```
+
+The `lines=10` and `lines=1000` series update after each launch. The live view is
+replaced by one clean final report. These are different workloads, so neither is
+called a winner. For comparisons between equivalent command implementations,
+see [interleaved command comparisons](../../docs/EXPERIMENTS.md#interleaved-command-comparisons).

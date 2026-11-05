@@ -141,6 +141,8 @@ final class TerminalDisplay {
     Process child = null;
     Thread shutdown = null;
     long start = System.nanoTime();
+    boolean liveView = results && out == null && comparison == null;
+    LiveReport live = new LiveReport(err, width, liveView);
     try {
       child =
           builder
@@ -154,11 +156,17 @@ final class TerminalDisplay {
       err.print("\033[?25l");
       int frame = 0, shown = 0;
       do {
-        shown = drain(stream, shown, err, comparison, width);
-        err.print(frame(frame++, (System.nanoTime() - start) / 1e9, title, width));
+        shown =
+            liveView
+                ? drainLive(stream, shown, live)
+                : drain(stream, shown, err, comparison, width);
+        if (!liveView || shown == 0)
+          err.print(frame(frame++, (System.nanoTime() - start) / 1e9, title, width));
         err.flush();
       } while (!child.waitFor(80, TimeUnit.MILLISECONDS));
-      shown = drain(stream, shown, err, comparison, width);
+      shown =
+          liveView ? drainLive(stream, shown, live) : drain(stream, shown, err, comparison, width);
+      live.close();
       int status = child.exitValue();
       complete = status == 0;
       err.print("\r\033[2K");
@@ -175,12 +183,13 @@ final class TerminalDisplay {
       if (out != null) Files.copy(stdout, out);
       Files.copy(stderr, err);
       if (results && status == 0) {
-        if (shown == 0) summary(Files.readString(stdout), err, comparison, width);
+        if (shown == 0 || liveView) summary(Files.readString(stdout), err, comparison, width);
         else footer(Files.readString(stdout), err, comparison);
       }
       if (out == null) err.println("  Raw report: " + path(stdout));
       return status;
     } finally {
+      live.close();
       if (!complete) err.println("  Failed-run files: " + path(stdout) + " · " + path(stderr));
       restore(child, err);
       if (shutdown != null) Runtime.getRuntime().removeShutdownHook(shutdown);
@@ -222,6 +231,18 @@ final class TerminalDisplay {
       shown++;
     }
     return shown;
+  }
+
+  static int drainLive(Path directory, int shown, LiveReport live) throws IOException {
+    int available = shown;
+    while (Files.isRegularFile(directory.resolve(available + ".json"))) available++;
+    if (available != shown) {
+      JsonArray snapshot = new JsonArray();
+      for (int i = 0; i < available; i++)
+        snapshot.add(JsonParser.parseString(Files.readString(directory.resolve(i + ".json"))));
+      live.update(snapshot, "Benchmarking · " + available + " cases complete");
+    }
+    return available;
   }
 
   static void terminate(Process child) {
@@ -380,62 +401,71 @@ final class TerminalDisplay {
       JsonArray rows = JsonParser.parseString(json).getAsJsonArray();
       StringBuilder table = new StringBuilder();
       if (comparison != null && heading && !rows.isEmpty()) table.append(comparisonHeading(width));
-      for (JsonElement element : rows) {
-        JsonObject row = element.getAsJsonObject();
-        JsonObject metric = row.getAsJsonObject("primaryMetric");
-        if (comparison != null) {
-          table.append(comparisonRow(row, comparison, width));
-          if (row.has("smh")
-              && row.getAsJsonObject("smh").has("experimentMode")
-              && !row.getAsJsonObject("smh").get("experimentMode").getAsString().equals("steady")) {
-            List<Double> observations = new ArrayList<>();
-            for (JsonElement fork : metric.getAsJsonArray("rawData"))
-              for (JsonElement value : fork.getAsJsonArray()) observations.add(value.getAsDouble());
-            table.append(ResultDetails.render(row, observations, width));
-          } else table.append(ResultDetails.conditions(row));
+      for (List<JsonObject> group : VariantCharts.groups(rows)) {
+        if (comparison == null && group.size() > 1) {
+          table.append(VariantCharts.render(group, width));
           continue;
         }
-        table
-            .append("\n  ")
-            .append(TEXT)
-            .append(label(row, width - 4))
-            .append(RESET)
-            .append("\n  ")
-            .append(EDGE)
-            .append("─".repeat(width - 4))
-            .append(RESET)
-            .append("\n\n    ")
-            .append(BOLD)
-            .append(CYAN)
-            .append(ResultDetails.number(metric.get("score").getAsDouble()))
-            .append(' ')
-            .append(ResultDetails.unit(metric.get("scoreUnit").getAsString()))
-            .append(RESET)
-            .append(DIM)
-            .append("  mean")
-            .append(RESET)
-            .append("\n\n");
-        List<Double> samples = new ArrayList<>();
-        for (JsonElement fork : metric.getAsJsonArray("rawData"))
-          for (JsonElement value : fork.getAsJsonArray()) samples.add(value.getAsDouble());
-        if (metric.getAsJsonArray("rawData").size() > 1)
+        for (JsonObject row : group) {
+          JsonObject metric = row.getAsJsonObject("primaryMetric");
+          if (comparison != null) {
+            table.append(comparisonRow(row, comparison, width));
+            if (row.has("smh")
+                && row.getAsJsonObject("smh").has("experimentMode")
+                && !row.getAsJsonObject("smh")
+                    .get("experimentMode")
+                    .getAsString()
+                    .equals("steady")) {
+              List<Double> observations = new ArrayList<>();
+              for (JsonElement fork : metric.getAsJsonArray("rawData"))
+                for (JsonElement value : fork.getAsJsonArray())
+                  observations.add(value.getAsDouble());
+              table.append(ResultDetails.render(row, observations, width));
+            } else table.append(ResultDetails.conditions(row));
+            continue;
+          }
           table
-              .append(DIM)
-              .append("    ")
-              .append(metric.getAsJsonArray("rawData").size())
-              .append(" forks · iteration scores shown in fork order")
+              .append("\n  ")
+              .append(TEXT)
+              .append(label(row, width - 4))
               .append(RESET)
-              .append('\n');
-        if (!samples.isEmpty()) table.append(ResultDetails.render(row, samples, width));
-        else table.append(DIM).append("    No iteration scores").append(RESET).append('\n');
-        if (row.has("measurementBatchSize") && row.get("measurementBatchSize").getAsLong() > 1)
-          table
-              .append(DIM)
-              .append("    Batch ")
-              .append(clean(row.get("measurementBatchSize").getAsString()))
-              .append(" invocations")
+              .append("\n  ")
+              .append(EDGE)
+              .append("─".repeat(width - 4))
               .append(RESET)
-              .append('\n');
+              .append("\n\n    ")
+              .append(BOLD)
+              .append(CYAN)
+              .append(ResultDetails.number(metric.get("score").getAsDouble()))
+              .append(' ')
+              .append(ResultDetails.unit(metric.get("scoreUnit").getAsString()))
+              .append(RESET)
+              .append(DIM)
+              .append("  mean")
+              .append(RESET)
+              .append("\n\n");
+          List<Double> samples = new ArrayList<>();
+          for (JsonElement fork : metric.getAsJsonArray("rawData"))
+            for (JsonElement value : fork.getAsJsonArray()) samples.add(value.getAsDouble());
+          if (metric.getAsJsonArray("rawData").size() > 1)
+            table
+                .append(DIM)
+                .append("    ")
+                .append(metric.getAsJsonArray("rawData").size())
+                .append(" forks · iteration scores shown in fork order")
+                .append(RESET)
+                .append('\n');
+          if (!samples.isEmpty()) table.append(ResultDetails.render(row, samples, width));
+          else table.append(DIM).append("    No iteration scores").append(RESET).append('\n');
+          if (row.has("measurementBatchSize") && row.get("measurementBatchSize").getAsLong() > 1)
+            table
+                .append(DIM)
+                .append("    Batch ")
+                .append(clean(row.get("measurementBatchSize").getAsString()))
+                .append(" invocations")
+                .append(RESET)
+                .append('\n');
+        }
       }
       err.print(table);
     } catch (RuntimeException ignored) {

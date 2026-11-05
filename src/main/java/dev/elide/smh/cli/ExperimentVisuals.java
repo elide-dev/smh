@@ -30,7 +30,7 @@ final class ExperimentVisuals {
                 positions,
                 startup,
                 units,
-                startup ? "Launch order" : "Elapsed seconds · window end",
+                startup ? "Launch order" : "Elapsed seconds",
                 width));
     if (startup) {
       boolean simulated = smh.get("backend").getAsString().equals("callgrind");
@@ -59,18 +59,24 @@ final class ExperimentVisuals {
       result
           .append("\n    ")
           .append(DIM)
-          .append(simulated ? "Instructions" : "ms")
-          .append(" · launch → ")
-          .append(clean(smh.get("endpoint").getAsString()))
+          .append(simulated ? "Instructions per launch" : "ms per launch")
           .append(RESET)
           .append('\n');
       int cells = Math.clamp(width - 36, 8, 48);
-      SimulationDisplay.bar(result, "Endpoint", endpoint, max, cells, CYAN);
-      SimulationDisplay.bar(result, "After", after, max, cells, GOLD);
+      String label =
+          switch (smh.get("endpoint").getAsString()) {
+            case "ready" -> "Ready";
+            case "exit" -> "Full run";
+            default -> "First result";
+          };
+      SimulationDisplay.bar(
+          result, String.format(Locale.ROOT, "%-14s", label), endpoint, max, cells, CYAN);
+      SimulationDisplay.bar(
+          result, String.format(Locale.ROOT, "%-14s", "Rest of run"), after, max, cells, GOLD);
       result
           .append("    ")
           .append(DIM)
-          .append("After: outside startup score")
+          .append("Rest of run excluded from score")
           .append(RESET)
           .append('\n');
     }
@@ -123,8 +129,8 @@ final class ExperimentVisuals {
       int width) {
     if (scores.isEmpty() || scores.stream().anyMatch(v -> !Double.isFinite(v)))
       return "    " + GOLD + "Incomplete experiment observations; see raw data" + RESET + "\n";
-    int available = Math.max(36, Math.min(160, width)) - 4;
-    boolean wide = width >= 110;
+    int available = Math.max(36, Math.min(112, width)) - 4;
+    boolean wide = width >= 90;
     int panel = wide ? (available - 4) / 2 : available;
     List<String> density = new ArrayList<>(ResultDetails.distribution(scores, panel));
     density.set(0, DIM + (startup ? "Launch distribution" : "Window distribution") + RESET);
@@ -138,8 +144,7 @@ final class ExperimentVisuals {
                         .mapToObj(i -> (double) i)
                         .toList()
                     : positions));
-    history.set(
-        0, VIOLET + (startup ? "Fresh-process launch order" : "Soak · min–max per column") + RESET);
+    history.set(0, VIOLET + (startup ? "Launch order" : "Soak · window range") + RESET);
     List<String> left = startup ? density : history, right = startup ? history : density;
     StringBuilder text = new StringBuilder();
     int lines = Math.max(left.size(), right.size());
@@ -159,10 +164,10 @@ final class ExperimentVisuals {
           .append(DIM)
           .append(rightCaption)
           .append(RESET);
-    text.append("\n\n");
+    text.append("\n");
     if (!wide) {
       for (String line : right) text.append("    ").append(line).append('\n');
-      text.append("    ").append(DIM).append(startup ? axis : units).append(RESET).append("\n\n");
+      text.append("    ").append(DIM).append(startup ? axis : units).append(RESET).append("\n");
     }
     if (startup) {
       List<Double> sorted = scores.stream().sorted().toList();

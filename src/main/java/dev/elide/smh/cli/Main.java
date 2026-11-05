@@ -262,7 +262,7 @@ public class Main implements Runnable {
         if (!simulation && !run.mode.equals("startup"))
           effective.addProperty("output", report.resolve("results.json").toString());
         config = Files.writeString(report.resolve("run.json"), effective.toString());
-        System.err.println("Experiment files: " + TerminalDisplay.path(report));
+        System.err.println("  Files · " + TerminalDisplay.path(report));
       }
       BuildConfig c = BuildConfig.read(buildConfig, home);
       c.verbose = verbose;
@@ -283,17 +283,30 @@ public class Main implements Runnable {
           if (!c.nativeArgs.contains(flag)) c.nativeArgs.add(flag);
       }
       ProcessBuilder process;
-      if (!c.execution.equals("aot")) {
-        if (rebuild)
-          throw new IllegalArgumentException("--rebuild currently applies to AOT artifacts only");
-        process = RuntimeExecution.prepare(c, config);
-      } else {
-        System.err.println("Checking build inputs…");
-        BuildCache.Result artifact =
-            BuildCache.build(c, rebuild, settings -> builder.build(settings, false));
-        System.err.println(
-            (artifact.hit() ? "Cache hit · " : "Built · ") + artifact.key().substring(0, 12));
-        process = RuntimeExecution.aot(artifact, config);
+      Files.createDirectories(c.output);
+      Path buildLog =
+          report == null
+              ? Files.createTempFile(c.output, "build-", ".log")
+              : report.resolve("build.log");
+      System.err.println("  Build log · " + TerminalDisplay.path(buildLog));
+      try (var log = new java.io.PrintStream(Files.newOutputStream(buildLog))) {
+        TerminalDisplay.BUILD_LOG.set(log);
+        if (!c.execution.equals("aot")) {
+          if (rebuild)
+            throw new IllegalArgumentException("--rebuild currently applies to AOT artifacts only");
+          process = RuntimeExecution.prepare(c, config);
+        } else {
+          TerminalDisplay.buildMessages().println("Checking build inputs…");
+          BuildCache.Result artifact =
+              BuildCache.build(c, rebuild, settings -> builder.build(settings, false));
+          TerminalDisplay.buildMessages()
+              .println(
+                  (artifact.hit() ? "Cache hit · " : "Built · ") + artifact.key().substring(0, 12));
+          process = RuntimeExecution.aot(artifact, config);
+        }
+      } finally {
+        TerminalDisplay.BUILD_LOG.remove();
+        if (verbose) Files.copy(buildLog, System.err);
       }
       if (run.mode.equals("startup")) {
         StartupExperiment.run(process, config, report, experiment.valgrind, display, comparison);

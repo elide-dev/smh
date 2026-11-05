@@ -10,7 +10,7 @@ import java.util.*;
 
 /** Descriptive views of every retained iteration score, outside measured work. */
 final class ResultDetails {
-  private static final int HEIGHT = 8;
+  private static final int HEIGHT = 4;
   private static final String BLOCKS = " ▁▂▃▄▅▆▇█";
 
   private ResultDetails() {}

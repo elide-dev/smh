@@ -106,6 +106,7 @@ def main():
                     str(run),
                     "--display",
                     "plain",
+                    "--verbose",
                 ],
                 stdout=out,
                 stderr=err,

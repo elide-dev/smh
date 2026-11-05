@@ -33,9 +33,10 @@ final class BytecodeBuilder {
               false,
               settings -> compile(settings, false, commands),
               BuildCache::bytecodeFingerprint);
-      System.err.println(
-          (result.hit() ? "Bytecode cache hit · " : "Bytecode built · ")
-              + result.key().substring(0, 12));
+      TerminalDisplay.buildMessages()
+          .println(
+              (result.hit() ? "Bytecode cache hit · " : "Bytecode built · ")
+                  + result.key().substring(0, 12));
       return new Artifact(
           result.binary().getParent().getParent().getParent().getParent().getParent(),
           result.key());
@@ -101,7 +102,7 @@ final class BytecodeBuilder {
     if (!jmh && c.observer != null) compile.add("-Asmh.observer=" + c.observer);
     if (!jmh) compile.add("-Asmh.target=" + platform.targetTriple());
     javaSources.forEach(p -> compile.add(p.toString()));
-    if (dryRun || c.verbose) System.err.println(String.join(" ", compile));
+    if (dryRun || c.verbose) TerminalDisplay.buildMessages().println(String.join(" ", compile));
     if (!dryRun) commands.run(compile, c.output);
     Path marker =
         classes.resolve(jmh ? "META-INF/BenchmarkList" : "dev/elide/smh/generated/Main.class");

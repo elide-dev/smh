@@ -97,7 +97,7 @@ class SimulationDisplayTest {
     assertTrue(plain.contains("instructions/op"));
     assertTrue(plain.contains("−" + ResultDetails.number(50) + "% observed"));
     assertTrue(plain.contains("Callgrind · simulated events"));
-    assertTrue(plain.contains("accuracy unqualified"));
+    assertFalse(plain.contains("accuracy unqualified"));
     assertTrue(plain.contains("Host/build equivalence unchecked"));
     assertTrue(plain.contains("Instruction counts identical"));
     assertFalse(plain.contains("Instructions/op · iteration order"));

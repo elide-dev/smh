@@ -30,7 +30,7 @@ final class LayerCache {
     try (var lock = new RandomAccessFile(Path.of(directory + ".lock").toFile(), "rw")) {
       lock.getChannel().lock();
       if (valid(directory)) {
-        System.err.println("Layer cache hit · " + directory.getFileName());
+        TerminalDisplay.buildMessages().println("Layer cache hit · " + directory.getFileName());
         return;
       }
       Path staging = Files.createTempDirectory(root, "pending-");
@@ -49,12 +49,13 @@ final class LayerCache {
               root.resolve("rejected-" + UUID.randomUUID()),
               StandardCopyOption.ATOMIC_MOVE);
         Files.move(staging, directory, StandardCopyOption.ATOMIC_MOVE);
-        System.err.println("Layer ready · " + TerminalDisplay.path(directory));
+        TerminalDisplay.buildMessages().println("Layer ready · " + TerminalDisplay.path(directory));
       } catch (Exception failure) {
         Path diagnostics = root.resolve("failed-" + UUID.randomUUID());
         try {
           Files.move(staging, diagnostics, StandardCopyOption.ATOMIC_MOVE);
-          System.err.println("Layer build diagnostics · " + TerminalDisplay.path(diagnostics));
+          TerminalDisplay.buildMessages()
+              .println("Layer build diagnostics · " + TerminalDisplay.path(diagnostics));
         } catch (IOException cleanup) {
           failure.addSuppressed(cleanup);
         }

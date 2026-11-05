@@ -78,7 +78,7 @@ class ResultDetailsTest {
     assertTrue(result.contains("8 iterations"));
     assertTrue(result.contains("██"));
     assertEquals(2, result.lines().toList().get(1).chars().filter(c -> c == '█').count());
-    assertEquals(8, result.lines().toList().get(8).chars().filter(c -> c == '█').count());
+    assertEquals(8, result.lines().toList().get(4).chars().filter(c -> c == '█').count());
     assertFalse(result.contains("Run order"));
     assertFalse(result.contains("CV"));
     assertFalse(result.contains("reference"));
@@ -103,7 +103,7 @@ class ResultDetailsTest {
       assertTrue(lines.getFirst().contains("min–max per column"));
       assertTrue(result.contains("Iteration index"));
       assertTrue(lines.get(1).substring(column).contains("┃"), result);
-      assertTrue(lines.get(8).substring(column).contains("●"), result);
+      assertTrue(lines.get(4).substring(column).contains("●"), result);
       assertTrue(result.contains("1000"));
     }
   }

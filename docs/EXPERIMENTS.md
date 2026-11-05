@@ -50,7 +50,7 @@ For wall measurements, the parent starts its timer before launching the child an
 stops when it receives the endpoint notification, or observes process exit.
 The parent records each launch's process ID alongside its observations.
 Notification transport and parent scheduling are included. Child completion is
-retained separately. The displayed “After” value is the nonnegative difference
+retained separately. The displayed “Rest of run” value is the nonnegative difference
 between these parent observations, not an independently timed cleanup phase.
 A child must still exit successfully after readiness or first result; a later
 cleanup failure invalidates that launch. `--timeout 30s` is the default per-process
@@ -118,11 +118,14 @@ stability limits. CLI `--backend callgrind` removes inherited wall-only policies
 and supplies a 10,000-invocation window when needed. Both the requested and
 effective configurations are retained so these overrides remain inspectable.
 
-Histograms are retained in every mode. Wide terminals show two panels; narrow
-terminals stack them. Cyan identifies the primary observations and endpoint;
+Histograms are retained in every mode. Plots use four rows; experiment panels
+share a row at 90 columns and above and stack in narrower terminals. Their total
+width is capped at 112 columns to keep multiple cases compact. Cyan identifies the primary observations and endpoint;
 violet identifies run history and late windows; gold marks work after the
 startup endpoint or qualification conditions. Color does not declare a winner.
-Labels, axes, and shapes carry the same meaning without color. Startup displays
+Labels, axes, and shapes carry the same meaning without color. The startup bars
+name the selected boundary (“Ready”, “First result”, or “Full run”) and show
+“Rest of run” on the same scale. Startup displays
 median and p95 with launch count; soak displays early and late medians with the
 number of retained windows. These are descriptive summaries, not significance
 or JIT-quiescence tests. Comparisons require matching experiment mode, startup
@@ -132,6 +135,18 @@ Copyable JSON policies are provided for [startup](../examples/startup-run.json),
 [wall soak](../examples/soak-run.json), and
 [simulation soak](../examples/soak-simulation-run.json). Pass one with
 `smh bench --build-config examples/build.json --config PATH`.
+
+Build diagnostics and cache decisions are saved in the printed build-log location;
+`--verbose` replays them before results. Compiler subprocesses retain their own
+full logs, referenced by that build log. Startup launch progress occupies a temporary
+terminal line, cleared before the complete report is printed. Redirected output
+contains no progress updates. Messages use a two-space margin and plot contents
+use a four-space inset.
+
+The raw `accuracy: unqualified` field means that general measurement accuracy has
+not been established; it does not indicate a failed run. It is retained in JSON
+rather than repeated in the default report. Actual failure and stopping reasons
+remain visible.
 
 ## Terminal examples
 

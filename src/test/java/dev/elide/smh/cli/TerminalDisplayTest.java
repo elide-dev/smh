@@ -128,7 +128,7 @@ class TerminalDisplayTest {
     TerminalDisplay.summary(
         BenchmarkComparisonTest.rows(row).toString(), new PrintStream(bytes), null, 80);
     assertTrue(plain(bytes.toString()).contains("Batch 64 invocations"));
-    assertTrue(bytes.toString().contains("accuracy unqualified"));
+    assertFalse(bytes.toString().contains("accuracy unqualified"));
     row.addProperty("measurementBatchSize", 1);
     bytes.reset();
     TerminalDisplay.summary(BenchmarkComparisonTest.rows(row).toString(), new PrintStream(bytes));
@@ -385,6 +385,21 @@ class TerminalDisplayTest {
           assertTrue(err.toString().contains("log:"));
         }
       }
+      var log = new ByteArrayOutputStream();
+      var screen = new ByteArrayOutputStream();
+      System.setErr(new PrintStream(screen));
+      TerminalDisplay.BUILD_LOG.set(new PrintStream(log));
+      try {
+        assertEquals(
+            0,
+            TerminalDisplay.build(
+                child("System.out.print(\"saved diagnostic\");"), "compile", directory, true));
+      } finally {
+        TerminalDisplay.BUILD_LOG.remove();
+      }
+      assertEquals("", screen.toString());
+      assertTrue(log.toString().contains("saved diagnostic"));
+      assertTrue(log.toString().contains("log:"));
       Thread.currentThread().interrupt();
       try {
         assertThrows(

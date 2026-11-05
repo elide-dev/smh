@@ -37,7 +37,8 @@ smh bench
 Elide incrementally compiles the application and packages a deterministic JAR. SMH
 hashes build inputs and verifies cached artifacts before reuse. Every invocation
 runs fresh measurements. Use `smh bench --rebuild` to force compilation. Full compiler
-logs are saved with their paths printed; errors are displayed automatically.
+logs and cache decisions are saved in the printed build-log location. Use
+`--verbose` to replay build diagnostics before the benchmark report.
 
 Each input size gets **100 warmup iterations and 1,000 measured iterations**, with
 a 1 ms target per iteration. These are iteration scores, not 1,000 individual
@@ -64,6 +65,27 @@ smh bench --compare baseline.json
 Setup constructs inputs outside the measured region. Returned totals go through
 SMH's typed compiler blackhole. This demonstrates the application workflow; it
 does not establish general measurement accuracy.
+
+## Startup and soak
+
+After assembling the application, try the compact mode-specific views:
+
+```sh
+smh bench --mode startup --launches 20 --output build/startup --display tui
+smh bench --mode soak --duration 10s --output build/soak --display tui
+```
+
+Each output directory must be new. Both input sizes run. Startup uses fresh
+processes and measures through the first result; `--until ready` selects setup
+readiness and `--until exit` selects the full process lifetime. Soak measures each
+size for the full duration after warmup. Histograms retain the distribution;
+launch order and soak timelines retain history. See [Experiment modes](../../docs/EXPERIMENTS.md)
+for simulation commands and exact measurement boundaries.
+
+Launch progress clears before startup results appear. Build/cache details stay in
+`build.log` under the experiment directory; `--verbose` prints them before results.
+The terminal rounds numbers for readability; JSON retains exact observations and
+qualification metadata.
 
 ## CodSpeed: simulation and walltime
 

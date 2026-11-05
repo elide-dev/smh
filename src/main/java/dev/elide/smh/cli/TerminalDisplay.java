@@ -286,6 +286,12 @@ final class TerminalDisplay {
         RESET);
   }
 
+  static final ThreadLocal<PrintStream> BUILD_LOG = new ThreadLocal<>();
+
+  static PrintStream buildMessages() {
+    return Optional.ofNullable(BUILD_LOG.get()).orElse(System.err);
+  }
+
   static int build(ProcessBuilder builder, String title, Path directory, boolean verbose)
       throws Exception {
     return build(
@@ -293,11 +299,12 @@ final class TerminalDisplay {
         title,
         directory,
         verbose,
-        enabled(
-            Mode.auto,
-            Optional.ofNullable(System.console()).map(Console::isTerminal).orElse(false),
-            System.getenv()),
-        System.err);
+        BUILD_LOG.get() == null
+            && enabled(
+                Mode.auto,
+                Optional.ofNullable(System.console()).map(Console::isTerminal).orElse(false),
+                System.getenv()),
+        buildMessages());
   }
 
   static int build(
@@ -569,9 +576,6 @@ final class TerminalDisplay {
                   + clean(row.get("vmName").getAsString())
                   + " · JDK "
                   + clean(row.get("jdkVersion").getAsString()));
-        if (row.has("smh") && row.getAsJsonObject("smh").has("accuracy"))
-          qualifications.add(
-              "accuracy " + clean(row.getAsJsonObject("smh").get("accuracy").getAsString()));
         if (row.has("mode")) modes.add(row.get("mode").getAsString());
       }
       if (comparison != null) {

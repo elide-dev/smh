@@ -59,7 +59,7 @@ class ExperimentVisualsTest {
           List<Double> samples = List.of(1., 2., 3., 4., 5.);
           String view = ResultDetails.render(row, samples, width);
           assertTrue(view.contains(startup ? "Launch distribution" : "Window distribution"));
-          assertTrue(view.contains(startup ? "launch order" : "min–max per column"));
+          assertTrue(view.contains(startup ? "Launch order" : "window range"));
           assertTrue(view.contains(startup ? "p95" : "quarter median"));
           assertTrue(view.contains(TerminalDisplay.CYAN));
           for (String line : view.replaceAll("\033\\[[0-9;]*m", "").lines().toList())
@@ -79,10 +79,24 @@ class ExperimentVisualsTest {
     assertTrue(
         ExperimentVisuals.render(row(false, false), List.of(Double.NaN), 80)
             .contains("Incomplete"));
+    for (String endpoint : List.of("ready", "exit", "first-result")) {
+      JsonObject startup = row(true, false);
+      startup.getAsJsonObject("smh").addProperty("endpoint", endpoint);
+      String view = ExperimentVisuals.render(startup, List.of(1., 2., 3.), 100);
+      assertTrue(
+          view.contains(
+              switch (endpoint) {
+                case "ready" -> "Ready";
+                case "exit" -> "Full run";
+                default -> "First result";
+              }));
+      assertTrue(view.lines().count() < 24, view);
+    }
     JsonObject exit = row(true, true);
     for (JsonElement e : exit.getAsJsonObject("smh").getAsJsonArray("observations"))
       e.getAsJsonObject().add("postEndpointEvents", new JsonObject());
-    assertTrue(ExperimentVisuals.render(exit, List.of(1., 2., 3., 4., 5.), 80).contains("After"));
+    assertTrue(
+        ExperimentVisuals.render(exit, List.of(1., 2., 3., 4., 5.), 80).contains("Rest of run"));
     JsonObject simulation =
         JsonParser.parseString(
                 """

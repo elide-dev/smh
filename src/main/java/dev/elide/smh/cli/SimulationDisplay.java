@@ -194,7 +194,7 @@ final class SimulationDisplay {
     text.append("\n  ")
         .append(DIM)
         .append("Event bars start at zero.")
-        .append("\n  Simulated · accuracy unqualified")
+        .append("\n  Simulated instructions")
         .append(RESET)
         .append('\n');
     if (report.has("purpose"))

@@ -279,9 +279,50 @@ class StartupExperimentTest {
                     null,
                     launcher));
       } else if (List.of("normal", "exit").contains(scenario)) {
-        JsonArray rows =
-            StartupExperiment.run(
-                process, config, target, "valgrind", TerminalDisplay.Mode.tui, null, launcher);
+        var screen = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        JsonArray rows;
+        try {
+          System.setErr(new PrintStream(screen));
+          rows =
+              StartupExperiment.run(
+                  process,
+                  config,
+                  target,
+                  "valgrind",
+                  TerminalDisplay.Mode.tui,
+                  null,
+                  (builder, path, timeout, token, finished) -> {
+                    assertFalse(screen.toString().contains("Launch distribution"));
+                    return launcher.execute(builder, path, timeout, token, finished);
+                  });
+        } finally {
+          System.setErr(original);
+        }
+        assertTrue(screen.toString().contains("Launch distribution"));
+        assertFalse(screen.toString().contains("Startup ·"));
+        assertFalse(screen.toString().contains("accuracy unqualified"));
+        screen.reset();
+        try {
+          System.setErr(new PrintStream(screen));
+          StartupExperiment.run(
+              process,
+              config,
+              Files.createDirectory(directory.resolve("terminal-" + scenario)),
+              "valgrind",
+              TerminalDisplay.Mode.tui,
+              null,
+              launcher,
+              true);
+        } finally {
+          System.setErr(original);
+        }
+        String rendered = screen.toString();
+        int chart = rendered.indexOf("Launch distribution");
+        int progress = rendered.lastIndexOf("Startup ·");
+        assertTrue(progress >= 0 && progress < chart, rendered);
+        assertTrue(rendered.substring(progress, chart).contains("\r\033[2K"), rendered);
+        assertFalse(rendered.substring(chart).contains("Startup ·"));
         assertEquals(
             100,
             rows.get(0).getAsJsonObject().getAsJsonObject("primaryMetric").get("score").getAsInt());

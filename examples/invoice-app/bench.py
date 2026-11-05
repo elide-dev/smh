@@ -10,7 +10,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parent
 (root / "build").mkdir(exist_ok=True)
 log = root / "build/assemble.log"
-print("Assembling invoice-app…", file=sys.stderr, flush=True)
+print("  Assembling invoice-app…", file=sys.stderr, flush=True)
 with log.open("w") as output:
     result = subprocess.run(
         [sys.executable, "assemble.py"], cwd=root, stdout=output, stderr=subprocess.STDOUT
@@ -18,5 +18,5 @@ with log.open("w") as output:
 if result.returncode:
     print(log.read_text(), file=sys.stderr)
     sys.exit(result.returncode)
-print(f"Application ready · log: {log.relative_to(root)}", file=sys.stderr)
+print(f"  Application ready · log: {log.relative_to(root)}", file=sys.stderr)
 sys.exit(subprocess.call(["smh", "bench", *sys.argv[1:]], cwd=root))

@@ -177,7 +177,7 @@ public class AotBuilder {
 
   private void execute(List<String> command, Path cwd, boolean dryRun, boolean verbose)
       throws Exception {
-    if (dryRun || verbose) System.err.println(String.join(" ", command));
+    if (dryRun || verbose) TerminalDisplay.buildMessages().println(String.join(" ", command));
     if (!dryRun) {
       if (defaultCommands) runCommand(command, cwd, verbose);
       else commands.run(command, cwd);
@@ -201,6 +201,6 @@ public class AotBuilder {
               + code
               + "): "
               + command.getFirst()
-              + "; see compiler diagnostics above");
+              + "; see retained compiler logs");
   }
 }

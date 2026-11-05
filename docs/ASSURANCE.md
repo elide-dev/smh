@@ -441,8 +441,8 @@ JVM tests exercise independent clock traces, persistent trial state, logical
 operation normalization, partial final windows, lifecycle failures, duplicate or
 missing readiness notifications, timeouts, malformed simulator dumps, comparison
 identity, and charts from 40 to 160 columns. The final JVM suite passes all
-153 tests with no skips: production line coverage is 3,747/3,760 (99.65%), branch
-coverage is 2,272/2,293 (99.08%), and mathematical-kernel line and branch coverage
+153 tests with no skips: production line coverage is 3,764/3,778 (99.63%), branch
+coverage is 2,288/2,310 (99.05%), and mathematical-kernel line and branch coverage
 are 100%. Final coverage and native validation receipts are retained under `build/experiment-validation/run-20261105/`; individual
 runs, commands, artifact hashes, raw counters, and failure controls are under
 `build/experiment-tests/`. The receipt distinguishes final checks from earlier
@@ -483,3 +483,9 @@ budget includes fixtures and between-window harness work, while window scores
 retain the existing invocation/batch scope. Partial simulator windows include
 fixed loop/call overhead, which can affect their per-operation scores. JMH and
 Leyden delegation remain steady-only; runtime-loaded hosts remain wall-only.
+
+The compact report follow-up retains the same measurement boundaries and raw
+qualification fields. Its JVM tests exercise temporary startup progress before
+report rendering, build-log routing, narrow layouts, preserved histogram tails,
+and isolated timeline spikes at four plot rows. `build/clean-ui-validation/`
+retains the native invoice-app terminal captures and current validation receipt.

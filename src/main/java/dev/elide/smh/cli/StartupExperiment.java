@@ -196,6 +196,9 @@ final class StartupExperiment {
     } catch (Exception failure) {
       recordFailure(directory, failure);
       throw failure;
+    } finally {
+      if (Optional.ofNullable(System.console()).map(Console::isTerminal).orElse(false))
+        System.err.print("\r\033[2K");
     }
   }
 
@@ -208,13 +211,33 @@ final class StartupExperiment {
       BenchmarkComparison comparison,
       Launcher launcher)
       throws Exception {
+    return run(
+        template,
+        config,
+        directory,
+        valgrind,
+        display,
+        comparison,
+        launcher,
+        Optional.ofNullable(System.console()).map(Console::isTerminal).orElse(false));
+  }
+
+  static JsonArray run(
+      ProcessBuilder template,
+      Path config,
+      Path directory,
+      String valgrind,
+      TerminalDisplay.Mode display,
+      BenchmarkComparison comparison,
+      Launcher launcher,
+      boolean terminal)
+      throws Exception {
     RunConfig settings = RunConfig.read(config.toString());
     JsonObject effective = JsonParser.parseString(Files.readString(config)).getAsJsonObject();
     effective.remove("output");
     String until = settings.until == null ? "first-result" : settings.until;
     boolean exit = until.equals("exit"),
         simulation = settings.backend == MeasurementBackend.CALLGRIND;
-    boolean terminal = Optional.ofNullable(System.console()).map(Console::isTerminal).orElse(false);
     boolean visual = TerminalDisplay.enabled(display, terminal, System.getenv());
     if (comparison != null && !visual)
       throw new IllegalArgumentException("--compare requires a terminal or --display tui");
@@ -289,13 +312,10 @@ final class StartupExperiment {
         scores.add(score);
         sum = sum.add(score);
         Files.writeString(launchDirectory.resolve("observation.json"), observation.toString());
-        System.err.println(
-            "Startup · "
-                + TerminalDisplay.clean(description.get("benchmark").getAsString())
-                + " · launch "
-                + (i + 1)
-                + "/"
-                + count);
+        if (visual && terminal) {
+          System.err.print("\r\033[2K  Startup · launch " + (i + 1) + "/" + count);
+          System.err.flush();
+        }
       }
       JsonObject row = description.deepCopy(), metric = new JsonObject(), smh = new JsonObject();
       row.addProperty("mode", "startup");
@@ -324,22 +344,18 @@ final class StartupExperiment {
       row.add("smh", smh);
       results.add(row);
       Files.writeString(caseDirectory.resolve("result.json"), row.toString());
-      if (visual)
-        TerminalDisplay.summary(
-            new Gson().toJson(List.of(row)),
-            System.err,
-            comparison,
-            TerminalDisplay.width(System.getenv()));
     }
+    if (visual && terminal) System.err.print("\r\033[2K");
     String json = new GsonBuilder().setPrettyPrinting().create().toJson(results);
     Files.writeString(directory.resolve("results.json"), json);
     if (settings.output != null) {
       Files.createDirectories(settings.output.toAbsolutePath().getParent());
       Files.writeString(settings.output, json);
     }
+    if (visual)
+      TerminalDisplay.summary(json, System.err, comparison, TerminalDisplay.width(System.getenv()));
     if (!visual || !terminal) System.out.println(json);
-    System.err.println(
-        "Startup report: " + TerminalDisplay.path(directory.resolve("results.json")));
+    System.err.println("  Report · " + TerminalDisplay.path(directory.resolve("results.json")));
     return results;
   }
 }

@@ -77,7 +77,7 @@ def build_and_test():
         hashlib.sha256((APP / "build/invoice-app.jar").read_bytes()).hexdigest() == jar_hash,
         "Unchanged application builds must produce identical JAR bytes",
     )
-    cached_command = [*cli, "bench", "--display", "plain"]
+    cached_command = [*cli, "bench", "--display", "plain", "--verbose"]
     fresh = json.loads(logged([*cached_command, "--rebuild"], APP, evidence / "bench-first.json"))
     cached = json.loads(logged(cached_command, APP, evidence / "bench-hit.json"))
     require("Built ·" in (evidence / "bench-first.stderr.log").read_text())

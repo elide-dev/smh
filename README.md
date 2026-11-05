@@ -15,15 +15,37 @@
 
 # SMH
 
+> *S*ubstrateVM *M*icrobenchmark *H*arness
+
 **Write Java benchmarks. Build native executables. Measure wall time or simulated instructions.**
 
-SMH is an AOT benchmark harness for GraalVM Native Image. It uses JMH annotations,
-generates direct benchmark calls, and provides an Elide-built Micronaut CLI in
-`dev.elide.smh`. Builds support optimization levels, reusable Native Image layers,
-and PGO where the compiler supports them.
+SMH brings JMH-style benchmarking to GraalVM Native Image, with an Elide-built
+Micronaut CLI in `dev.elide.smh`.
 
 [Get started](docs/GETTING_STARTED.md) · [Documentation](docs/README.md) ·
 [Releases](https://github.com/elide-dev/smh/releases) · [Contributing](CONTRIBUTING.md)
+
+## Why SMH?
+
+[JMH](https://github.com/openjdk/jmh) is the standard starting point for Java
+microbenchmarks, with a mature harness for JVM execution and JIT warmup. When
+your application ships as a Native Image executable, you also need to understand
+its performance under **SubstrateVM**, with the ahead-of-time compiler, build
+options, and runtime that your application actually uses. A HotSpot benchmark
+alone cannot answer that question.
+
+SMH brings the familiar JMH benchmark model into a native build-and-run workflow.
+It uses JMH's actual annotations and generates direct-call adapters and a
+closed-world registry before native compilation. You can keep familiar benchmark
+code while making the native artifact itself the subject of the experiment.
+See the [supported API](docs/USAGE.md#java-api) when porting an existing suite.
+
+The distinctive part is treating **the native build as part of the benchmark**:
+compare `-O1`, `-O2`, and `-O3`, reuse Native Image layers with matching build
+settings, and train/use PGO profiles where supported. Run wall-time measurements
+or Linux Callgrind instruction/cache simulation against those artifacts, with
+explicit measurement boundaries and retained raw observations. The Rust bootstrap
+also lets a native host drive a benchmark compiled as a shared library.
 
 ## Run your first benchmark
 

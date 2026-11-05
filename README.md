@@ -15,7 +15,7 @@
 
 # SMH
 
-> *S*ubstrateVM *M*icrobenchmark *H*arness
+> **S**ubstrateVM **M**icrobenchmark **H**arness
 
 **Write Java benchmarks. Build native executables. Measure wall time or simulated instructions.**
 

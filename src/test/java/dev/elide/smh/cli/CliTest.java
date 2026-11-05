@@ -24,6 +24,18 @@ class CliTest {
 
   private record Output(int status, String stdout, String stderr) {}
 
+  @Test
+  void terminalLoggingKeepsWarningsButSuppressesRoutineInformation() {
+    try (var logging = Main.logging()) {
+      assertFalse(
+          logging.router().route("dev.elide.smh.cli", System.Logger.Level.INFO).isEnabled());
+      assertTrue(
+          logging.router().route("dev.elide.smh.cli", System.Logger.Level.WARNING).isEnabled());
+      assertTrue(
+          logging.router().route("dev.elide.smh.cli", System.Logger.Level.ERROR).isEnabled());
+    }
+  }
+
   private Output invoke(String... args) {
     PrintStream out = System.out, err = System.err;
     ByteArrayOutputStream stdout = new ByteArrayOutputStream(),
@@ -151,23 +163,21 @@ class CliTest {
   }
 
   @Test
-  @org.junit.jupiter.api.condition.EnabledOnOs({
-    org.junit.jupiter.api.condition.OS.LINUX,
-    org.junit.jupiter.api.condition.OS.MAC
-  })
   void benchBuildsOnceButExecutesEveryTimeAndSupportsOverrides() throws Exception {
     Path home = Files.createDirectories(directory.resolve("sdk"));
     Files.writeString(home.resolve("smh.jar"), "processor");
     Files.writeString(home.resolve("smh-runtime.jar"), "runtime");
     Files.createDirectory(home.resolve("lib"));
+    boolean windows = Platform.current().os() == Platform.OperatingSystem.WINDOWS;
     Path tools = Files.createDirectories(directory.resolve("tools/bin"));
     Path compiler = Files.writeString(tools.resolve("javac"), "#!/bin/sh\necho compiler-v1\n");
     assertTrue(compiler.toFile().setExecutable(true));
     Path source = Files.writeString(directory.resolve("Work.java"), "source");
     JsonObject build = new JsonObject();
     build.addProperty("home", home.toString());
-    build.addProperty("javaHome", tools.getParent().toString());
-    build.addProperty("nativeImage", compiler.toString());
+    Path javaHome = windows ? Path.of(System.getProperty("java.home")) : tools.getParent();
+    build.addProperty("javaHome", javaHome.toString());
+    build.addProperty("nativeImage", windows ? java() : compiler.toString());
     build.addProperty("output", directory.resolve("out").toString());
     build.addProperty("layers", false);
     var sources = new com.google.gson.JsonArray();
@@ -182,20 +192,20 @@ class CliTest {
     var calls = new java.util.concurrent.atomic.AtomicInteger();
     Main.Bench bench = new Main.Bench();
     bench.builder =
-        new AotBuilder(
-            (command, cwd) -> {
-              calls.incrementAndGet();
-              if (command.contains("-d")) {
-                Path generated = cwd.resolve("classes/dev/elide/smh/generated/Main.class");
-                Files.createDirectories(generated.getParent());
-                Files.writeString(generated, "generated");
-              } else {
-                Path binary = cwd.resolve("benchmarks");
-                Files.writeString(
-                    binary, "#!/bin/sh\necho run >> '" + executions + "'\necho '[]'\n");
-                assertTrue(binary.toFile().setExecutable(true));
-              }
-            });
+        new AotBuilder() {
+          @Override
+          public Path build(BuildConfig settings, boolean dryRun) throws Exception {
+            calls.incrementAndGet();
+            Path binary = settings.output.resolve(windows ? "benchmarks.cmd" : "benchmarks");
+            Files.writeString(
+                binary,
+                windows
+                    ? "@echo off\r\necho run >> \"" + executions + "\"\r\necho []\r\n"
+                    : "#!/bin/sh\necho run >> '" + executions + "'\necho '[]'\n");
+            assertTrue(binary.toFile().setExecutable(true));
+            return binary;
+          }
+        };
     var parser = new CommandLine(bench);
     parser.parseArgs(
         "--build-config", config.toString(), "--config", run.toString(), "--display", "plain");
@@ -216,7 +226,7 @@ class CliTest {
         "--home",
         home.toString(),
         "--java-home",
-        tools.getParent().toString(),
+        javaHome.toString(),
         "-O3",
         "--verbose",
         "--rebuild",

@@ -24,17 +24,18 @@ public class Main implements Runnable {
   }
 
   static int execute(String[] args) {
-    RainbowGum.set(
-        () ->
-            RainbowGum.builder()
-                .route(
-                    route ->
-                        route
-                            .level(System.Logger.Level.WARNING)
-                            .appender(
-                                "stderr", appender -> appender.output(LogOutput.ofStandardErr())))
-                .build());
+    RainbowGum.set(Main::logging);
     return PicocliRunner.execute(Main.class, args);
+  }
+
+  static RainbowGum logging() {
+    return RainbowGum.builder()
+        .route(
+            route ->
+                route
+                    .level(System.Logger.Level.WARNING)
+                    .appender("stderr", appender -> appender.output(LogOutput.ofStandardErr())))
+        .build();
   }
 
   @Spec picocli.CommandLine.Model.CommandSpec spec;

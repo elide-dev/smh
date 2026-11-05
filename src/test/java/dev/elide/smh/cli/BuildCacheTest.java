@@ -145,18 +145,25 @@ class BuildCacheTest {
   }
 
   @Test
-  @org.junit.jupiter.api.condition.EnabledOnOs({
-    org.junit.jupiter.api.condition.OS.LINUX,
-    org.junit.jupiter.api.condition.OS.MAC
-  })
   void fingerprintTracksBytesOptionsDependenciesAndCompilerImplementations() throws Exception {
     var c = config();
     Path toolHome = Files.createDirectories(directory.resolve("tools"));
     Path bin = Files.createDirectories(toolHome.resolve("bin"));
-    Path launcher = Files.writeString(bin.resolve("javac"), "#!/bin/sh\necho compiler-v1\n");
-    assertTrue(launcher.toFile().setExecutable(true));
-    c.javaHome = toolHome;
-    c.nativeImage = List.of(launcher.toString());
+    boolean windows = System.getProperty("os.name").startsWith("Windows");
+    Path launcher;
+    if (windows) {
+      launcher =
+          Files.copy(
+              Path.of(System.getenv("SystemRoot"), "System32/cmd.exe"),
+              bin.resolve("compiler.exe"));
+      c.javaHome = Path.of(System.getProperty("java.home"));
+      c.nativeImage = List.of(launcher.toString(), "/d", "/c", "echo compiler-v1");
+    } else {
+      launcher = Files.writeString(bin.resolve("javac"), "#!/bin/sh\necho compiler-v1\n");
+      assertTrue(launcher.toFile().setExecutable(true));
+      c.javaHome = toolHome;
+      c.nativeImage = List.of(launcher.toString());
+    }
     String original = BuildCache.fingerprint(c);
     assertEquals(original, BuildCache.fingerprint(c));
     c.verbose = true;
@@ -190,7 +197,7 @@ class BuildCacheTest {
     before = BuildCache.fingerprint(c);
     Files.writeString(implementation, "three");
     assertNotEquals(before, BuildCache.fingerprint(c));
-    assertNotEquals(BuildCache.compilerIdentity(List.of(launcher.toString())), original);
+    assertNotEquals(BuildCache.compilerIdentity(c.nativeImage), original);
     Path sources = Files.createDirectory(directory.resolve("src"));
     Files.writeString(sources.resolve("Other.java"), "other");
     c.sources.add(sources);
@@ -204,9 +211,10 @@ class BuildCacheTest {
     Files.createSymbolicLink(sources.resolve("linked"), lib);
     assertThrows(IOException.class, () -> BuildCache.fingerprint(c));
     Files.delete(sources.resolve("linked"));
-    Files.writeString(launcher, "#!/bin/sh\nexit 9\n");
+    if (windows) c.nativeImage = List.of(launcher.toString(), "/d", "/c", "exit 9");
+    else Files.writeString(launcher, "#!/bin/sh\nexit 9\n");
     assertThrows(IOException.class, () -> BuildCache.fingerprint(c));
-    assertTrue(Files.isRegularFile(BuildCache.executable("gcc")));
+    assertTrue(Files.isRegularFile(BuildCache.executable(windows ? "cmd.exe" : "gcc")));
   }
 
   @Test

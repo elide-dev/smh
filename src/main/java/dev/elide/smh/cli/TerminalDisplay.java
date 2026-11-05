@@ -47,11 +47,6 @@ final class TerminalDisplay {
     }
   }
 
-  static int run(ProcessBuilder builder, String title, Mode mode, boolean results)
-      throws Exception {
-    return run(builder, title, mode, results, null);
-  }
-
   static int run(
       ProcessBuilder builder,
       String title,

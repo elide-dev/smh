@@ -403,7 +403,9 @@ class TerminalDisplayTest {
     assertEquals(1, bytes.toString().split("stream.first", -1).length - 1);
     assertEquals(1, bytes.toString().split("JDK 25", -1).length - 1);
     assertTrue(bytes.toString().indexOf("stream.first") < bytes.toString().indexOf("Complete"));
-    assertEquals("build/log.txt", TerminalDisplay.path(Path.of("build/log.txt").toAbsolutePath()));
+    assertEquals(
+        Path.of("build/log.txt").toString(),
+        TerminalDisplay.path(Path.of("build/log.txt").toAbsolutePath()));
     TerminalDisplay.footer("not json", display, null);
   }
 

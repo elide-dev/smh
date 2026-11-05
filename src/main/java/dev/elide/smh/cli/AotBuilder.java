@@ -14,7 +14,7 @@ import java.util.stream.*;
 
 /** Compiles benchmark sources and reuses a base layer only for the same build variant. */
 @Singleton
-public final class AotBuilder {
+public class AotBuilder {
   @FunctionalInterface
   interface Commands {
     void run(List<String> command, Path cwd) throws Exception;

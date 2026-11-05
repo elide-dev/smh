@@ -16,14 +16,21 @@ public final class Runner {
 
   public static JsonArray run(List<BenchmarkSpec> specs, RunConfig config, Observer observer)
       throws Throwable {
-    return run(specs, config, observer, System::nanoTime, "System.nanoTime");
+    return run(
+        specs,
+        config,
+        observer,
+        System::nanoTime,
+        "System.nanoTime",
+        new ResultPublisher(System.getenv("SMH_RESULT_STREAM")));
   }
 
   // Package-private seam for deterministic reference traces; production always uses nanoTime.
   static JsonArray run(
       List<BenchmarkSpec> specs, RunConfig config, Observer observer, LongSupplier clock)
       throws Throwable {
-    return run(specs, config, observer, clock, "deterministic-test-clock");
+    return run(
+        specs, config, observer, clock, "deterministic-test-clock", new ResultPublisher(null));
   }
 
   private static JsonArray run(
@@ -31,7 +38,8 @@ public final class Runner {
       RunConfig config,
       Observer observer,
       LongSupplier clock,
-      String clockName)
+      String clockName,
+      ResultPublisher publisher)
       throws Throwable {
     config.validate();
     Pattern include = Pattern.compile(config.include);
@@ -53,10 +61,11 @@ public final class Runner {
       matrix(new ArrayList<>(dimensions.entrySet()), 0, new LinkedHashMap<>(), combinations);
       for (Map<String, String> params : combinations)
         if (config.backend == MeasurementBackend.CALLGRIND)
-          results.add(SimulationRunner.trial(spec, params, config, observer));
+          results.add(publisher.publish(SimulationRunner.trial(spec, params, config, observer)));
         else
           for (String mode : config.modes == null ? spec.modes() : config.modes)
-            results.add(trial(spec, params, mode, config, observer, clock, clockName));
+            results.add(
+                publisher.publish(trial(spec, params, mode, config, observer, clock, clockName)));
     }
     if (config.output != null) {
       Files.createDirectories(config.output.toAbsolutePath().getParent());

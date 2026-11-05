@@ -20,6 +20,8 @@ public final class BuildConfig {
   public List<String> nativeImage;
   public boolean layers = true;
   public boolean shared;
+  public boolean verbose;
+  public final List<Path> cacheInputs = new ArrayList<>();
   public String observer;
   public final List<String> nativeArgs = new ArrayList<>();
 
@@ -51,7 +53,8 @@ public final class BuildConfig {
             "layers",
             "shared",
             "nativeArgs",
-            "observer");
+            "observer",
+            "cacheInputs");
     for (String key : j.keySet())
       if (!allowed.contains(key))
         throw new IllegalArgumentException("Unknown build option: " + key);
@@ -70,6 +73,9 @@ public final class BuildConfig {
     if (j.has("classpath"))
       j.getAsJsonArray("classpath")
           .forEach(v -> c.classpath.add(base.resolve(v.getAsString()).normalize()));
+    if (j.has("cacheInputs"))
+      j.getAsJsonArray("cacheInputs")
+          .forEach(v -> c.cacheInputs.add(base.resolve(v.getAsString()).normalize()));
     if (j.has("optimization")) c.optimization = j.get("optimization").getAsString();
     if (j.has("pgo")) c.pgo = j.get("pgo").getAsString();
     if (j.has("profile")) c.profile = base.resolve(j.get("profile").getAsString()).normalize();

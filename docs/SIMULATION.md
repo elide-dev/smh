@@ -15,10 +15,17 @@ build/smh simulate build/simulation/benchmarks \
   --config examples/simulation-run.json --output build/simulation-run-1
 ```
 
+Interactive runs show colored event charts. Add `--compare previous/results.json`
+for paired bars against a compatible Callgrind report, or use `--display tui` to
+show charts on stderr while redirecting the original JSON stdout. See
+[terminal output](USAGE.md#animated-terminal-output) for display and comparison rules.
+
 Native Image, its host compiler, and Valgrind must be installed on the Linux
 worker. The output directory must be new. `--valgrind` selects a simulator
 executable. Other hosts receive an explicit unsupported error; no wall-clock
-fallback is performed. Codspeed and remote-worker orchestration remain open.
+fallback is performed. For whole-process CodSpeed simulation and walltime, see the
+[nested Elide application](../examples/invoice-app/README.md). A dedicated CodSpeed
+region adapter and remote-worker orchestration remain open.
 
 The simulator owns its manifest output: use CLI `--output`, and omit the run
 configuration `output` field. Benchmark stdout is retained separately in

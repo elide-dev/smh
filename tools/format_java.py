@@ -23,6 +23,8 @@ def main():
             "tests/qualification",
             "tests/fuzz/java",
             "examples/src",
+            "examples/invoice-app/src",
+            "examples/invoice-app/benchmarks",
         )
         for path in (root / directory).rglob("*.java")
     )

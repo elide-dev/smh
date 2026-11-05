@@ -1,0 +1,9 @@
+{
+  "home": "../../build",
+  "sources": ["benchmarks"],
+  "classpath": ["build/invoice-app.jar"],
+  "output": "build/benchmarks",
+  "optimization": "2",
+  "layers": false,
+  "nativeArgs": ["-H:-DeleteLocalSymbols", "-march=compatibility", "--parallelism=4", "-J-Xmx4g"]
+}

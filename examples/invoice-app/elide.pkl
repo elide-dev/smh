@@ -1,0 +1,17 @@
+// SPDX-FileCopyrightText: 2026 SMH contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+amends "elide:project.pkl"
+
+name = "invoice-app"
+version = "1.0.0"
+description = "A small invoice application, built with Elide and benchmarked with SMH"
+sources { ["main"] = "src/**/*.java" }
+jvm {
+  main = "example.invoice.InvoiceApp"
+  java { release = 25 }
+}
+scripts {
+  ["assemble"] = "python3 assemble.py"
+  ["bench-build"] = "smh build --config smh-build.json"
+  ["bench"] = "python3 bench.py"
+}

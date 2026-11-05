@@ -1,0 +1,8 @@
+{
+  "include": "InvoiceBenchmark",
+  "backend": "callgrind",
+  "params": {"lines": ["10"]},
+  "warmupIterations": 0,
+  "measurementIterations": 1,
+  "invocationsPerIteration": 100
+}

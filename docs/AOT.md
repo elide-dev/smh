@@ -4,7 +4,12 @@
 # AOT builds
 
 SMH compiles Java sources and generates direct-call adapters before invoking
-Native Image. These examples assume the source distribution in `build/`.
+Native Image. These examples assume the source distribution in `build/`, with
+that directory on `PATH` so the command is `smh`.
+
+Use `smh bench --build-config examples/build.json --config examples/run.json` to
+reuse verified, unchanged build artifacts and run fresh measurements in one command.
+See [cache behavior and limits](USAGE.md#build-once-per-input-revision-measure-every-time).
 
 ## Build configuration
 
@@ -35,11 +40,12 @@ JSON `javaHome` and CLI `--java-home`.
 | `nativeImage` | Compiler executable or an array of launcher arguments. Windows defaults to `cmd.exe /d /c native-image.cmd`. |
 | `nativeArgs` | Compiler options for memory, parallelism, CPU target, GC, and diagnostics. |
 | `observer` | Observer implementation class compiled into the benchmark. |
+| `cacheInputs` | Extra files/directories referenced by native options, hashed by `smh bench`. |
 
 Preview the compiler commands:
 
 ```sh
-build/smh build --config examples/build.json --dry-run
+smh build --config examples/build.json --dry-run
 ```
 
 ## Source compiler selection
@@ -49,7 +55,7 @@ By default, SMH uses `elide javac` when Elide is on `PATH`. Otherwise it selects
 (or JSON `javaHome`) takes precedence over automatic selection:
 
 ```sh
-build/smh build --config examples/build.json --java-home /path/to/graalvm
+smh build --config examples/build.json --java-home /path/to/graalvm
 ```
 
 An invalid selected JDK fails with its compiler path in the diagnostic. Compiler
@@ -61,13 +67,13 @@ The `nativeImage` setting independently selects the native compiler.
 Build separate output directories for each optimization level:
 
 ```sh
-build/smh build --config examples/build.json -O1 --output build/O1
-build/smh build --config examples/build.json -O2 --output build/O2
-build/smh build --config examples/build.json -O3 --output build/O3
+smh build --config examples/build.json -O1 --output build/O1
+smh build --config examples/build.json -O2 --output build/O2
+smh build --config examples/build.json -O3 --output build/O3
 
-build/smh run build/O1/benchmarks --config examples/run.json > build/O1/results.json
-build/smh run build/O2/benchmarks --config examples/run.json > build/O2/results.json
-build/smh run build/O3/benchmarks --config examples/run.json > build/O3/results.json
+smh run build/O1/benchmarks --config examples/run.json > build/O1/results.json
+smh run build/O2/benchmarks --config examples/run.json > build/O2/results.json
+smh run build/O3/benchmarks --config examples/run.json > build/O3/results.json
 ```
 
 Each command retains its JSON stdout beside the corresponding binary. The
@@ -90,16 +96,16 @@ monolithic: instrument, run representative training, then rebuild using the
 profile.
 
 ```sh
-build/smh build --config examples/build.json \
+smh build --config examples/build.json \
   --no-layers --pgo instrument --output build/instrument
 
-build/smh run build/instrument/benchmarks --config examples/run.json \
+smh run build/instrument/benchmarks --config examples/run.json \
   --profile-output build/training.iprof
 
-build/smh build --config examples/build.json \
+smh build --config examples/build.json \
   --no-layers -O3 --pgo use --profile build/training.iprof --output build/pgo
 
-build/smh run build/pgo/benchmarks --config examples/run.json
+smh run build/pgo/benchmarks --config examples/run.json
 ```
 
 Training timings are not performance results. Keep the profile, build metadata,
@@ -115,8 +121,8 @@ PGO profile dumping is not implemented.
 On Linux amd64, build a shared image and run it through the Rust bootstrap:
 
 ```sh
-build/smh build --config examples/build.json --shared --output build/shared
-build/smh run build/shared/libbenchmarks.so --config examples/run.json \
+smh build --config examples/build.json --shared --output build/shared
+smh run build/shared/libbenchmarks.so --config examples/run.json \
   --bootstrap build/smh-bootstrap
 ```
 

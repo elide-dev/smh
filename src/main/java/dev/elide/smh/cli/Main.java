@@ -17,7 +17,7 @@ import picocli.CommandLine.*;
     description = "SubstrateVM Microbenchmark Harness",
     mixinStandardHelpOptions = true,
     version = "smh 0.1.1", // x-release-please-version
-    subcommands = {Main.Build.class, Main.Run.class, Main.Simulate.class})
+    subcommands = {Main.Build.class, Main.Run.class, Main.Simulate.class, Main.Bench.class})
 public class Main implements Runnable {
   public static void main(String[] args) {
     System.exit(execute(args));
@@ -29,8 +29,10 @@ public class Main implements Runnable {
             RainbowGum.builder()
                 .route(
                     route ->
-                        route.appender(
-                            "stderr", appender -> appender.output(LogOutput.ofStandardErr())))
+                        route
+                            .level(System.Logger.Level.WARNING)
+                            .appender(
+                                "stderr", appender -> appender.output(LogOutput.ofStandardErr())))
                 .build());
     return PicocliRunner.execute(Main.class, args);
   }
@@ -65,9 +67,29 @@ public class Main implements Runnable {
     @Option(names = "--valgrind", defaultValue = "valgrind")
     String valgrind;
 
+    @Option(
+        names = "--display",
+        defaultValue = "auto",
+        description = "Terminal display: ${COMPLETION-CANDIDATES}")
+    TerminalDisplay.Mode display = TerminalDisplay.Mode.auto;
+
+    @Option(
+        names = "--compare",
+        description = "Saved SMH Callgrind results.json for event comparisons")
+    Path compare;
+
     @Override
     public Integer call() throws Exception {
-      System.out.println(runner.run(binary, config, output, valgrind));
+      var baseline = compare == null ? null : SimulationDisplay.read(compare);
+      boolean terminal =
+          java.util.Optional.ofNullable(System.console())
+              .map(java.io.Console::isTerminal)
+              .orElse(false);
+      var environment = System.getenv();
+      SimulationDisplay.visual(display, terminal, environment, baseline);
+      var report = runner.run(binary, config, output, valgrind);
+      SimulationDisplay.publish(
+          report, baseline, display, terminal, environment, System.out, System.err, output);
       return 0;
     }
   }
@@ -113,12 +135,16 @@ public class Main implements Runnable {
     @Option(names = "--shared", description = "Build library for the Rust bootstrapper")
     boolean shared;
 
+    @Option(names = "--verbose", description = "Show compiler commands and full build logs")
+    boolean verbose;
+
     @Option(names = "--dry-run", description = "Print compiler commands without executing them")
     boolean dryRun;
 
     @Override
     public Integer call() throws Exception {
       BuildConfig c = BuildConfig.read(config, home);
+      c.verbose = verbose;
       if (javaHome != null) c.javaHome = javaHome.toAbsolutePath();
       if (optimization != null) c.optimization = optimization;
       if (pgo != null) c.pgo = pgo;
@@ -126,8 +152,66 @@ public class Main implements Runnable {
       if (output != null) c.output = output.toAbsolutePath();
       if (noLayers) c.layers = false;
       if (shared) c.shared = true;
-      System.out.println(builder.build(c, dryRun));
+      System.out.println(TerminalDisplay.path(builder.build(c, dryRun)));
       return 0;
+    }
+  }
+
+  @Singleton
+  @Command(
+      name = "bench",
+      description = "Build if inputs changed, then run a fresh benchmark",
+      mixinStandardHelpOptions = true)
+  public static class Bench implements Callable<Integer> {
+    @Inject AotBuilder builder;
+
+    @Option(names = "--build-config", defaultValue = "smh-build.json")
+    Path buildConfig;
+
+    @Option(names = "--config", defaultValue = "smh-run.json")
+    Path config;
+
+    @Option(names = "--home")
+    Path home;
+
+    @Option(names = "--java-home")
+    Path javaHome;
+
+    @Option(names = {"-O", "--optimization"})
+    String optimization;
+
+    @Option(names = "--rebuild", description = "Compile a fresh artifact even on a cache hit")
+    boolean rebuild;
+
+    @Option(names = "--verbose", description = "Show full build logs")
+    boolean verbose;
+
+    @Option(names = "--display", defaultValue = "auto")
+    TerminalDisplay.Mode display = TerminalDisplay.Mode.auto;
+
+    @Option(names = "--compare")
+    Path compare;
+
+    @Override
+    public Integer call() throws Exception {
+      // Validate run inputs before paying for compilation. Results themselves are never cached.
+      dev.elide.smh.runtime.RunConfig.read(config.toString());
+      BenchmarkComparison comparison = compare == null ? null : BenchmarkComparison.read(compare);
+      BuildConfig c = BuildConfig.read(buildConfig, home);
+      c.verbose = verbose;
+      if (javaHome != null) c.javaHome = javaHome.toAbsolutePath();
+      if (optimization != null) c.optimization = optimization;
+      System.err.println("Checking build inputs…");
+      BuildCache.Result artifact =
+          BuildCache.build(c, rebuild, settings -> builder.build(settings, false));
+      System.err.println(
+          (artifact.hit() ? "Cache hit · " : "Built · ") + artifact.key().substring(0, 12));
+      return TerminalDisplay.run(
+          new ProcessBuilder(artifact.binary().toString(), config.toAbsolutePath().toString()),
+          "Benchmark · " + artifact.binary().getFileName(),
+          display,
+          true,
+          comparison);
     }
   }
 
@@ -139,6 +223,17 @@ public class Main implements Runnable {
   public static class Run implements Callable<Integer> {
     @Parameters(index = "0", description = "Native executable, or shared library with --bootstrap")
     Path binary;
+
+    @Option(
+        names = "--display",
+        defaultValue = "auto",
+        description = "Terminal display: ${COMPLETION-CANDIDATES}")
+    TerminalDisplay.Mode display = TerminalDisplay.Mode.auto;
+
+    @Option(
+        names = "--compare",
+        description = "Saved SMH wall-result JSON for terminal score deltas")
+    Path compare;
 
     @Option(names = "--config", description = "Run configuration JSON")
     Path config;
@@ -159,13 +254,19 @@ public class Main implements Runnable {
         throw new IllegalArgumentException(
             "--profile-output currently requires an executable; shared-library PGO needs"
                 + " toolchain-specific profile dumping");
+      BenchmarkComparison comparison = compare == null ? null : BenchmarkComparison.read(compare);
       java.util.List<String> command = new java.util.ArrayList<>();
       if (bootstrap != null) command.add(bootstrap.toAbsolutePath().toString());
       command.add(binary.toAbsolutePath().toString());
       if (profileOutput != null)
         command.add("-XX:ProfilesDumpFile=" + profileOutput.toAbsolutePath());
       if (config != null) command.add(config.toAbsolutePath().toString());
-      return new ProcessBuilder(command).inheritIO().start().waitFor();
+      return TerminalDisplay.run(
+          new ProcessBuilder(command),
+          "Benchmark · " + binary.getFileName(),
+          display,
+          true,
+          comparison);
     }
   }
 }

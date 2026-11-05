@@ -56,12 +56,16 @@ From a checkout, with [mise](https://mise.jdx.dev), Python 3, GraalVM JDK 25
 mise trust
 mise install
 mise run native
+export PATH="$PWD/build:$PATH"
 
-build/smh build --config examples/build.json
-build/smh run build/example/benchmarks --config examples/run.json
+smh --help
+smh build --config examples/build.json
+smh run build/example/benchmarks --config examples/run.json
 ```
 
-Results are printed as JSON and saved to `build/results.json`. Prefer a packaged
+The `PATH` setting makes the built CLI available as `smh` in your current shell.
+Results are saved to `build/results.json`; interactive runs show a summary, while
+redirected output stays JSON. Prefer a packaged
 SDK? Follow the [release installation guide](docs/GETTING_STARTED.md#install-a-release).
 
 ## Write familiar Java
@@ -99,12 +103,41 @@ adds setup, modes, and timing annotations. See the
 
 | Task | Command or guide |
 | --- | --- |
-| Fixed warmup and measurement | `build/smh run build/example/benchmarks --config examples/run.json` |
-| Batch calibration and statistical stabilization | `build/smh run build/example/benchmarks --config examples/calibrated-run.json` |
+| Fixed warmup and measurement | `smh run build/example/benchmarks --config examples/run.json` |
+| Batch calibration and statistical stabilization | `smh run build/example/benchmarks --config examples/calibrated-run.json` |
 | Instruction/cache simulation on Linux | [Callgrind guide](docs/SIMULATION.md) |
 | Compare `-O1`, `-O2`, and `-O3` | [Build variants](docs/AOT.md#optimization-and-layers) |
 | Train and use a PGO profile | [PGO walkthrough](docs/AOT.md#profile-guided-optimization) |
 | Integrate through a native shared library | [Rust bootstrap](docs/AOT.md#shared-libraries) and [Myna ABI](docs/FFI.md) |
+
+For example, build the same benchmark at two optimization levels and save each
+run separately:
+
+```sh
+smh build --config examples/build.json -O1 --output build/O1
+smh build --config examples/build.json -O3 --output build/O3
+
+smh run build/O1/benchmarks --config examples/run.json
+mv build/results.json build/O1-results.json
+smh run build/O3/benchmarks --config examples/run.json
+mv build/results.json build/O3-results.json
+```
+
+## Benchmark an Elide application
+
+The [invoice application](examples/invoice-app/README.md) is a small nested Elide
+project: build its application JAR, then compile and run a separate SMH benchmark
+against it. It includes real CodSpeed simulation and walltime integration checks.
+
+```sh
+cd examples/invoice-app
+elide run bench  # assemble app, build if inputs changed, run fresh measurements
+```
+
+Interactive runs use 24-bit color, a compact animated status line, and streaming results
+with a prominent mean, aligned statistics, and nearby duration references. The sample collects 100 warmup iterations and 1,000 measured
+iterations per input size, with iteration-score percentiles and variation.
+Add `--compare baseline.json` for score deltas against a saved run. Use `--display plain` for JSON, or `--display tui` to force animation.
 
 ## Read the numbers honestly
 

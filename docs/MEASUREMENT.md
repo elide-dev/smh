@@ -44,7 +44,7 @@ Optional `batchCalibration` selects a batch before warmup. It doubles from one
 up to explicit batch/attempt limits, retaining every probe. Every probe in an
 attempt must reach the target duration; exhaustion is reported rather than
 hidden. Iteration fixtures surround probes outside the clock pair. Calibration
-is incompatible with invocation fixtures, simulation, or an explicit batch.
+is incompatible with invocation fixtures, simulation, or an explicit batch greater than one.
 This measures probe duration, not timer resolution or empty-region overhead;
 it neither subtracts overhead nor detects JIT quiescence. Increasing
 batch size can change cache, allocation, and optimization behavior, so reports
@@ -91,8 +91,9 @@ run experimentally, but cannot receive an evidence-backed accuracy claim.
 ## Stabilization
 
 Warmup and measurement use predeclared bounded policies: minimum observations,
-window sizes, acceptable variation/drift, consecutive passing windows, and hard
-sample/time/work limits. Every observation and stop reason is retained.
+window sizes, acceptable variation/drift, consecutive passing windows, and a hard
+sample limit. Every observation and stop reason is retained. Independent hard
+time/work limits remain future obligations.
 
 Convergence requires the configured checks, including trend/dispersion tests. A
 constant series, a small coefficient of variation, or reaching a maximum count

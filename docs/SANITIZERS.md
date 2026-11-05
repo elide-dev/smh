@@ -38,8 +38,8 @@ instrumentation, TSan, UBSan, MSan/HWASan where applicable, and broader native h
 qualification remain tracked in ROADMAP.md.
 
 The quality workflow runs this profile on Linux amd64 and arm64, archives failed
-and successful evidence, and sends JUnit reports to Codecov. Hosted job execution
-has not yet been established by local results.
+and successful evidence, and sends JUnit reports to Codecov. [Hosted quality checks](https://github.com/elide-dev/smh/actions/runs/41938178623)
+passed on both Linux architectures.
 
 See the [Rust sanitizer documentation](https://doc.rust-lang.org/unstable-book/compiler-flags/sanitizer.html)
 for instrumentation scope, supported targets, and standard-library considerations.
@@ -51,7 +51,7 @@ the compatible Rust unit tests with strict provenance, Stacked Borrows and Tree
 Borrows, and seeds 0 and 1. A clean control must succeed and a deliberate
 use-after-free must produce Miri's undefined-behavior diagnostic before each
 test run. The default target is the compiler host; use
-`python tools/rust_miri.py --target aarch64-unknown-linux-gnu` to interpret the
+`python3 tools/rust_miri.py --target aarch64-unknown-linux-gnu` to interpret the
 ARM target. Results preserve commands, compiler identity, model/seed, logs and
 JUnit cases, and require the complete compatible test inventory.
 

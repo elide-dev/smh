@@ -6,3 +6,8 @@ version = 1
 path = ["CHANGELOG.md", ".release-please-manifest.json", "release-please-config.json", "Cargo.lock", "quality-policy.json", "examples/*.json", "abi/generated/**", "tests/fuzz/corpus/**", "tests/miri-control/Cargo.lock"]
 SPDX-FileCopyrightText = "2026 SMH contributors"
 SPDX-License-Identifier = "Apache-2.0 OR MIT"
+
+[[annotations]]
+path = ["docs/assets/*.png"]
+SPDX-FileCopyrightText = "2026 SMH contributors"
+SPDX-License-Identifier = "Apache-2.0 OR MIT"

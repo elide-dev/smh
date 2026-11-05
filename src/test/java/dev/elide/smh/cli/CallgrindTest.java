@@ -295,4 +295,43 @@ class CallgrindTest {
             directory.resolve("process.err")));
     assertFalse(Files.readString(directory.resolve("process.out")).isBlank());
   }
+
+  @Test
+  void soakImportsActualWorkAndRejectsIncompleteOrInvalidBudgets() throws Exception {
+    file(directory, 1, measured(1, "60"));
+    file(directory, 2, measured(2, "30"));
+    Files.writeString(
+        directory.resolve("callgrind.out.17-01"), dump(3, "Program termination", "0"));
+    JsonArray manifest = manifest(2);
+    JsonObject row = manifest.get(0).getAsJsonObject();
+    row.addProperty("experimentMode", "soak");
+    row.addProperty("requestedOperations", 4);
+    row.add("operationCounts", JsonParser.parseString("[3,1]"));
+    JsonObject result =
+        CallgrindRunner.importResults(manifest, directory)
+            .getAsJsonArray("results")
+            .get(0)
+            .getAsJsonObject();
+    assertEquals("4", result.getAsJsonObject("primaryMetric").get("denominator").getAsString());
+    assertEquals(22.5, result.getAsJsonObject("primaryMetric").get("score").getAsDouble());
+    assertEquals("not-assessed", result.get("instructionRepeatability").getAsString());
+    row.addProperty("requestedOperations", 6);
+    row.add("operationCounts", JsonParser.parseString("[3,3]"));
+    assertEquals(
+        "varies",
+        CallgrindRunner.importResults(manifest, directory)
+            .getAsJsonArray("results")
+            .get(0)
+            .getAsJsonObject()
+            .get("instructionRepeatability")
+            .getAsString());
+    row.addProperty("requestedOperations", 4);
+    for (String counts : List.of("[3]", "[3,0]", "[3,4]", "[3,2]")) {
+      row.add("operationCounts", JsonParser.parseString(counts));
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> CallgrindRunner.importResults(manifest, directory),
+          counts);
+    }
+  }
 }

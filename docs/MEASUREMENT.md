@@ -144,3 +144,6 @@ Instrumented PGO, sanitizers, fuzzing, and coverage runs are validation/training
 artifacts. They are never silently mixed into uninstrumented performance results.
 Unsupported, unqualified, unstable, or failed runs must be obvious to people and
 machine consumers.
+
+See [Experiment modes](EXPERIMENTS.md) for fresh-process startup boundaries,
+full-budget soak, and the different wall-time and simulated-work axes.

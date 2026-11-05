@@ -26,6 +26,15 @@ public final class SimulationRunner {
         config.measurementIterations == null
             ? spec.measurementIterations()
             : config.measurementIterations;
+    long totalInvocations = 0;
+    if (config.mode.equals("soak")) {
+      if (config.operations % spec.operationsPerInvocation() != 0)
+        throw new IllegalArgumentException(
+            "Soak operations must be divisible by operationsPerInvocation");
+      totalInvocations = config.operations / spec.operationsPerInvocation();
+      measurements = Math.toIntExact((totalInvocations - 1) / invocations + 1);
+    }
+    JsonArray operationCounts = new JsonArray();
     BenchmarkCase benchmark = Objects.requireNonNull(spec.factory().apply(params));
     if (benchmark.hasInvocationFixtures())
       throw new IllegalArgumentException(
@@ -35,8 +44,21 @@ public final class SimulationRunner {
     try {
       for (int i = 0; i < warmups; i++)
         iteration(benchmark, invocations, false, observer, spec.name(), params, i);
-      for (int i = 0; i < measurements; i++)
-        iteration(benchmark, invocations, true, observer, spec.name(), params, i);
+      for (int i = 0; i < measurements; i++) {
+        long count =
+            config.mode.equals("soak") ? Math.min(invocations, totalInvocations) : invocations;
+        iteration(benchmark, count, true, observer, spec.name(), params, i);
+        operationCounts.add(Math.multiplyExact(count, spec.operationsPerInvocation()));
+        if (config.mode.equals("soak")) {
+          totalInvocations -= count;
+          JsonObject observation = new JsonObject();
+          observation.addProperty("index", i);
+          observation.addProperty(
+              "operations", Math.multiplyExact(count, spec.operationsPerInvocation()));
+          observation.addProperty("status", "pending-counter-import");
+          ExperimentJournal.record(config, spec.name(), params, observation);
+        }
+      }
     } catch (Throwable t) {
       failure = t;
       throw t;
@@ -45,6 +67,12 @@ public final class SimulationRunner {
     }
     JsonObject result = new JsonObject();
     result.addProperty("schemaVersion", 1);
+    result.addProperty("experimentMode", config.mode);
+    if (config.mode.equals("soak")) {
+      result.add("operationCounts", operationCounts);
+      result.addProperty("requestedOperations", config.operations);
+      result.addProperty("stoppingReason", "operations-reached");
+    }
     result.addProperty("benchmark", spec.name());
     result.addProperty("backend", "callgrind");
     result.addProperty("quantity", "simulated-events");

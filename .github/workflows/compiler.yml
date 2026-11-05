@@ -38,12 +38,18 @@ jobs:
           sudo apt-get install --yes --no-install-recommends valgrind
       - name: Qualify deterministic work, fixture exclusion, layers, and broken boundaries
         run: python tools/test_simulation.py --output build/simulation-tests/ci
+      - name: Exercise process-wide startup and exact-work soak
+        run: |
+          python tools/test_experiments.py --execution aot --simulation
+          python tools/test_experiments.py --execution aot --simulation --layers
       - name: Preserve real simulator evidence and failures
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: simulation-${{ matrix.os }}
-          path: build/simulation-tests/ci/
+          path: |
+            build/simulation-tests/ci/
+            build/experiment-tests/
           compression-level: 6
           retention-days: 14
 

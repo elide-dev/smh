@@ -1,0 +1,10 @@
+{
+  "mode": "soak",
+  "include": "ArraySum",
+  "params": { "size": ["1024"] },
+  "modes": ["AverageTime"],
+  "warmupIterations": 3,
+  "warmupNanos": 100000000,
+  "measurementNanos": 1000000000,
+  "durationNanos": 300000000000
+}

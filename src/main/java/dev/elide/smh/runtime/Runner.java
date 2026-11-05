@@ -16,13 +16,21 @@ public final class Runner {
 
   public static JsonArray run(List<BenchmarkSpec> specs, RunConfig config, Observer observer)
       throws Throwable {
-    return run(
-        specs,
-        config,
-        observer,
-        System::nanoTime,
-        "System.nanoTime",
-        new ResultPublisher(System.getenv("SMH_RESULT_STREAM")));
+    try {
+      return run(
+          specs,
+          config,
+          observer,
+          System::nanoTime,
+          "System.nanoTime",
+          new ResultPublisher(System.getenv("SMH_RESULT_STREAM")));
+    } catch (Throwable failure) {
+      JsonObject status = new JsonObject();
+      status.addProperty("status", "failed");
+      status.addProperty("reason", failure.toString());
+      cleanup(failure, () -> ExperimentJournal.record(config, "", Map.of(), status));
+      throw failure;
+    }
   }
 
   // Package-private seam for deterministic reference traces; production always uses nanoTime.
@@ -50,6 +58,8 @@ public final class Runner {
     for (String key : config.params.keySet())
       if (selected.stream().noneMatch(s -> s.params().containsKey(key)))
         throw new IllegalArgumentException("Unknown parameter: " + key);
+    if (config.mode.equals("startup"))
+      return Startup.run(selected, config, "1".equals(System.getenv("SMH_STARTUP_DISCOVER")));
     JsonArray results = new JsonArray();
     for (BenchmarkSpec spec : selected) {
       Map<String, List<String>> dimensions = new TreeMap<>(spec.params());
@@ -76,7 +86,7 @@ public final class Runner {
     return results;
   }
 
-  private static void matrix(
+  static void matrix(
       List<Map.Entry<String, List<String>>> dims,
       int i,
       Map<String, String> row,
@@ -106,6 +116,8 @@ public final class Runner {
         c.measurementIterations == null ? spec.measurementIterations() : c.measurementIterations;
     long wn = c.warmupNanos == null ? spec.warmupNanos() : c.warmupNanos;
     long mn = c.measurementNanos == null ? spec.measurementNanos() : c.measurementNanos;
+    if (c.mode.equals("soak") && mode.equals("SingleShotTime"))
+      throw new IllegalArgumentException("Soak requires AverageTime or Throughput windows");
     BenchmarkCase benchmark = Objects.requireNonNull(spec.factory().apply(params));
     if ((c.wallBatchSize > 1 || c.batchCalibration != null) && benchmark.hasInvocationFixtures())
       throw new IllegalArgumentException("Wall batches cannot contain invocation fixtures");
@@ -134,7 +146,9 @@ public final class Runner {
               warmup,
               wn,
               c.warmupStability,
-              batchSize);
+              batchSize,
+              0,
+              c);
       measured =
           phase(
               spec,
@@ -147,7 +161,9 @@ public final class Runner {
               iterations,
               mn,
               c.measurementStability,
-              batchSize);
+              batchSize,
+              c.mode.equals("soak") ? c.durationNanos : 0,
+              c);
     } catch (Throwable t) {
       failure = t;
       throw t;
@@ -207,6 +223,7 @@ public final class Runner {
     result.add("secondaryMetrics", new JsonObject());
     JsonObject smh = new JsonObject();
     smh.addProperty("schemaVersion", 1);
+    smh.addProperty("experimentMode", c.mode);
     smh.addProperty("backend", "wall");
     smh.addProperty("clock", clockName);
     smh.addProperty(
@@ -239,21 +256,53 @@ public final class Runner {
       int count,
       long duration,
       StabilityPolicy policy,
-      int batchSize)
+      int batchSize,
+      long budget,
+      RunConfig config)
       throws Throwable {
     Phase phase = new Phase(policy);
-    int limit = policy == null ? count : policy.maximumSamples();
+    int limit = budget > 0 ? Integer.MAX_VALUE : policy == null ? count : policy.maximumSamples();
+    long start = budget > 0 ? clock.getAsLong() : 0;
+    long position = 0;
+    phase.budget = budget;
     for (int i = 0; i < limit; i++) {
       Observation sample =
           iteration(
-              spec, params, mode, benchmark, observer, clock, measured, i, duration, batchSize);
+              spec,
+              params,
+              mode,
+              benchmark,
+              observer,
+              clock,
+              measured,
+              i,
+              budget > 0 ? Math.min(duration, budget - position) : duration,
+              batchSize);
       phase.scores.add(sample.score);
       phase.elapsed.add(sample.elapsed);
       phase.operations.add(sample.operations);
+      if (budget > 0) {
+        phase.starts.add(position);
+        position = elapsedSince(start, clock.getAsLong());
+        phase.ends.add(position);
+        JsonObject observation = new JsonObject();
+        observation.addProperty("index", i);
+        observation.addProperty("scoringMode", mode);
+        observation.addProperty("elapsedNanos", sample.elapsed);
+        observation.addProperty("operations", sample.operations);
+        observation.addProperty("score", sample.score);
+        observation.addProperty("startNanos", phase.starts.getLast());
+        observation.addProperty("endNanos", position);
+        ExperimentJournal.record(config, spec.name(), params, observation);
+        if (position >= budget) break;
+      }
       if (phase.monitor != null
           && phase.monitor.accept(sample.score).status() != StabilityMonitor.Status.COLLECTING)
         break;
     }
+    if (budget > 0 && position < budget)
+      throw new IllegalStateException(
+          "Soak exhausted the window limit before reaching its duration");
     return phase;
   }
 
@@ -367,6 +416,8 @@ public final class Runner {
     final List<Double> scores = new ArrayList<>();
     final List<Long> elapsed = new ArrayList<>();
     final List<Long> operations = new ArrayList<>();
+    final List<Long> starts = new ArrayList<>(), ends = new ArrayList<>();
+    long budget;
     final StabilityPolicy policy;
     final StabilityMonitor monitor;
 
@@ -384,12 +435,17 @@ public final class Runner {
         sample.addProperty("elapsedNanos", elapsed.get(i));
         sample.addProperty("operations", operations.get(i));
         sample.addProperty("score", scores.get(i));
+        if (budget > 0) {
+          sample.addProperty("startNanos", starts.get(i));
+          sample.addProperty("endNanos", ends.get(i));
+        }
         observations.add(sample);
       }
       result.add("observations", observations);
       if (monitor == null) {
         result.addProperty("status", "not-assessed");
-        result.addProperty("stoppingReason", "fixed-count");
+        result.addProperty("stoppingReason", budget > 0 ? "duration-reached" : "fixed-count");
+        if (budget > 0) result.addProperty("requestedDurationNanos", budget);
       } else {
         StabilityMonitor.Result last = monitor.result();
         result.addProperty("status", last.status().name());

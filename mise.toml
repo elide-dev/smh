@@ -24,6 +24,9 @@ run = "python3 tools/build.py crema"
 [tasks."test-jmh"]
 run = "python3 tools/test_jmh.py"
 
+[tasks."test-experiments"]
+run = "python3 tools/test_experiments.py"
+
 [tasks."test-execution"]
 run = "python3 tools/test_execution.py"
 

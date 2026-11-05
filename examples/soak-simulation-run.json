@@ -1,0 +1,9 @@
+{
+  "mode": "soak",
+  "backend": "callgrind",
+  "include": "ArraySum",
+  "params": { "size": ["1024"] },
+  "warmupIterations": 1,
+  "invocationsPerIteration": 10000,
+  "operations": 1000000
+}

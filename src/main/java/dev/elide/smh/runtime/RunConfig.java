@@ -9,6 +9,12 @@ import java.util.*;
 /** Null overrides defer to benchmark annotations. Durations are nanoseconds. */
 public final class RunConfig {
   public String include = ".*";
+  public String mode = "steady";
+  public String until;
+  public Integer launches;
+  public Long durationNanos;
+  public Long operations;
+  public Long timeoutNanos;
   public MeasurementBackend backend = MeasurementBackend.WALL;
   public Long invocationsPerIteration;
   public int wallBatchSize = 1;
@@ -35,6 +41,12 @@ public final class RunConfig {
     Set<String> allowed =
         Set.of(
             "include",
+            "mode",
+            "until",
+            "launches",
+            "durationNanos",
+            "operations",
+            "timeoutNanos",
             "backend",
             "invocationsPerIteration",
             "wallBatchSize",
@@ -50,6 +62,12 @@ public final class RunConfig {
             "output");
     for (String key : j.keySet())
       if (!allowed.contains(key)) throw new IllegalArgumentException("Unknown run option: " + key);
+    if (j.has("mode")) c.mode = text(j.get("mode"));
+    if (j.has("until")) c.until = text(j.get("until"));
+    if (j.has("launches")) c.launches = integer(j, "launches");
+    if (j.has("durationNanos")) c.durationNanos = number(j, "durationNanos");
+    if (j.has("operations")) c.operations = number(j, "operations");
+    if (j.has("timeoutNanos")) c.timeoutNanos = number(j, "timeoutNanos");
     if (j.has("include")) c.include = text(j.get("include"));
     if (j.has("backend")) c.backend = MeasurementBackend.parse(text(j.get("backend")));
     if (j.has("invocationsPerIteration"))
@@ -142,12 +160,50 @@ public final class RunConfig {
 
   public void validate() {
     Objects.requireNonNull(backend, "backend");
+    if (!Set.of("steady", "startup", "soak").contains(mode))
+      throw new IllegalArgumentException("mode must be steady, startup or soak");
+    if (durationNanos != null && durationNanos < 1
+        || operations != null && operations < 1
+        || timeoutNanos != null && timeoutNanos < 1
+        || launches != null && launches < 1)
+      throw new IllegalArgumentException("Experiment budgets must be positive");
+    if (!mode.equals("startup") && (until != null || launches != null || timeoutNanos != null))
+      throw new IllegalArgumentException("until, launches and timeoutNanos require startup mode");
+    if (!mode.equals("soak") && (durationNanos != null || operations != null))
+      throw new IllegalArgumentException("durationNanos and operations require soak mode");
+    if (mode.equals("startup")) {
+      if (until != null && !Set.of("ready", "first-result", "exit").contains(until))
+        throw new IllegalArgumentException("until must be ready, first-result or exit");
+      if (warmupIterations != null
+          || measurementIterations != null
+          || warmupNanos != null
+          || measurementNanos != null
+          || warmupStability != null
+          || measurementStability != null
+          || batchCalibration != null
+          || wallBatchSize != 1
+          || modes != null
+          || invocationsPerIteration != null)
+        throw new IllegalArgumentException(
+            "Startup uses fresh launches, not iteration/warmup/batch policies");
+    }
+    if (mode.equals("soak")) {
+      if (measurementIterations != null || measurementStability != null)
+        throw new IllegalArgumentException(
+            "Soak runs its complete budget; measurement count/stability stopping is unsupported");
+      if (backend == MeasurementBackend.WALL
+          ? durationNanos == null || operations != null
+          : operations == null || durationNanos != null)
+        throw new IllegalArgumentException(
+            "Soak requires durationNanos for wall or operations for simulation");
+    }
     if (wallBatchSize < 1) throw new IllegalArgumentException("wallBatchSize must be positive");
     if (batchCalibration != null && (backend != MeasurementBackend.WALL || wallBatchSize != 1))
       throw new IllegalArgumentException(
           "Calibration requires wall mode and the default wallBatchSize");
     if (backend == MeasurementBackend.CALLGRIND) {
-      if (invocationsPerIteration == null || invocationsPerIteration < 1)
+      if (!mode.equals("startup")
+          && (invocationsPerIteration == null || invocationsPerIteration < 1))
         throw new IllegalArgumentException(
             "Callgrind requires a positive invocationsPerIteration budget");
       if (warmupNanos != null || measurementNanos != null || modes != null || wallBatchSize != 1)

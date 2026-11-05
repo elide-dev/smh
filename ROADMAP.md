@@ -273,6 +273,13 @@ architecture or running under emulation does not qualify native timing.
   previews, commands, and artifact hashes are retained under `build/terminal-tests/`;
   scope and limits are recorded in `docs/ASSURANCE.md`.
 
+- [x] F07-11: Add fresh-process startup and full-budget soak experiments with wall
+  and simulation measurements, retained observations, and mode-specific visuals.
+  Implementation and contracts: [Experiment modes](docs/EXPERIMENTS.md).
+  Evidence: 153 passing JVM tests and coverage gates; native CLI wall checks on
+  AOT, HotSpot, C2, and Crema/Ristretto; monolithic and layered Callgrind checks;
+  58/140-column terminal recordings. Contracts and limits: [Assurance](docs/ASSURANCE.md#startup-and-soak-experiments).
+
 ## M8 — security, releases, and OpenSSF
 
 - [ ] F08-01: Document security reporting, threat model, supported versions, governance, reviews, and contribution rules.

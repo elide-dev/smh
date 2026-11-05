@@ -1,0 +1,8 @@
+{
+  "mode": "startup",
+  "include": "ArraySum",
+  "params": { "size": ["1024"] },
+  "until": "first-result",
+  "launches": 30,
+  "timeoutNanos": 30000000000
+}

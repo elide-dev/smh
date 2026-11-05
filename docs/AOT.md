@@ -159,6 +159,11 @@ preparation times, then exercises both hosts with compilation diagnostics. Its
 timings identify their scope and are local observations, not portable latency
 guarantees.
 
+For fresh-process startup or sustained soak, use
+[`smh bench --mode`](EXPERIMENTS.md). AOT, HotSpot, C2, and Crema hosts support
+wall experiments; Linux AOT also supports Callgrind. Delegated JMH and its
+Leyden cache workflow currently remain steady-only.
+
 ## Delegated JMH and Leyden
 
 The SDK includes `smh-jmh.jar`, JMH core and annotation processor **1.37**, and

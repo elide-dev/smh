@@ -426,3 +426,60 @@ New evidence must identify the revision, command, machine, compiler/runtime,
 artifact hashes, assumptions, and whether execution was native or interpreted.
 Retain failures and negative controls alongside successes. Update this ledger
 when evidence changes; the [roadmap](../ROADMAP.md) tracks remaining work.
+
+## Startup and soak experiments
+
+The [experiment contract](EXPERIMENTS.md) separates parent-observed wall startup
+from guest-process simulation and duration-based soak from exact-work soak.
+Startup records parent launch IDs, launch-to-notification (or exit), completion,
+and every successful observation. A later cleanup failure invalidates the
+launch. Soak retains completed windows in an append-only diagnostic journal;
+failed or interrupted journals are not successful result reports. Warmup stopping
+conditions remain visible even when soak completes its measurement budget.
+
+JVM tests exercise independent clock traces, persistent trial state, logical
+operation normalization, partial final windows, lifecycle failures, duplicate or
+missing readiness notifications, timeouts, malformed simulator dumps, comparison
+identity, and charts from 40 to 160 columns. The final JVM suite passes all
+153 tests with no skips: production line coverage is 3,747/3,760 (99.65%), branch
+coverage is 2,272/2,293 (99.08%), and mathematical-kernel line and branch coverage
+are 100%. Final coverage and native validation receipts are retained under `build/experiment-validation/run-20261105/`; individual
+runs, commands, artifact hashes, raw counters, and failure controls are under
+`build/experiment-tests/`. The receipt distinguishes final checks from earlier
+failed probes. Terminal examples in the guide are short validation captures,
+not cross-engine performance evidence.
+
+Real Linux AMD64 checks use JDK/Native Image 25.0.4.1 (Oracle GraalVM
+25.3.4.1+1.1), the rebuilt Crema host with runtime class loading and Ristretto,
+and upstream Callgrind 3.25.1. They exercise fresh processes on AOT, HotSpot,
+C2, and Crema; explicit readiness before the remainder of setup; first result
+before deliberate cleanup delay; process exit; full wall-duration budgets; and
+exact simulator budgets ending in a partial window. Native terminal recordings
+cover 58- and 140-column layouts. Simulation checks cover monolithic and layered
+images and verify the preserved `Startup.reached()` snapshot boundary. The
+new CI steps retain these observations; local evidence is not a hosted CI pass.
+
+The [Callgrind format specification](https://valgrind.org/docs/manual/cl-format.html)
+permits `summary` to exceed attributed `totals`. An actual post-endpoint snapshot
+contained 271,172 summary instructions and 271,167 attributed instructions.
+Process-wide startup import retains both, uses the full summary for scoring,
+and rejects attribution counts above the summary. Ordinary benchmark-region
+import still requires exact agreement. All guest threads contribute to startup;
+parent and kernel work do not. No simulated event count is presented as wall time.
+
+This compiler rejected a layered fixture calling `ProcessHandle.current()` because
+`LinkedTransferQueueDualNodeIsUniprocessorAccessor` became reachable only in the
+application layer. Moving PID observation to the parent removes that diagnostic
+API from the workload; the layered fixture then builds with the cached base.
+This does not qualify arbitrary JDK API reachability across layers. Workloads
+hitting this compiler restriction can explicitly set `layers: false`; SMH does
+not silently change build models.
+
+Fresh processes do not establish cold filesystem caches, JIT quiescence, or
+accuracy qualification. Validation jobs may run concurrently and their scores
+must not be used to rank engines. Startup wall timing includes notification and
+parent scheduling; simulation snapshots precede notification. Soak's elapsed
+budget includes fixtures and between-window harness work, while window scores
+retain the existing invocation/batch scope. Partial simulator windows include
+fixed loop/call overhead, which can affect their per-operation scores. JMH and
+Leyden delegation remain steady-only; runtime-loaded hosts remain wall-only.

@@ -42,6 +42,20 @@ jobs:
         run: |
           python tools/build.py crema
           python tools/test_execution.py
+      - name: Exercise startup and soak with the native CLI
+        run: |
+          python tools/test_experiments.py --execution hotspot --cli build/smh
+          python tools/test_experiments.py --execution hotspot-c2 --cli build/smh
+          python tools/test_experiments.py --execution crema --cli build/smh
+          python tools/test_experiments.py --execution aot --cli build/smh
+      - name: Retain experiment observations and failures
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: experiment-evidence
+          path: build/experiment-tests/
+          if-no-files-found: error
+          retention-days: 14
       - name: Exercise pinned JMH and Leyden AOT cache
         run: python tools/test_jmh.py
       - name: Prepare compatible O2 runtime layer

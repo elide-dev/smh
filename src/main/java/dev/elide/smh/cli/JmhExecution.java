@@ -16,6 +16,9 @@ final class JmhExecution {
 
   static List<String> arguments(RunConfig run, int forks) {
     run.validate();
+    if (!run.mode.equals("steady"))
+      throw new IllegalArgumentException(
+          "JMH delegation supports steady mode; use smh bench for startup/soak");
     if (run.backend != MeasurementBackend.WALL
         || run.wallBatchSize != 1
         || run.batchCalibration != null

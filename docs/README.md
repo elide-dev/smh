@@ -12,6 +12,7 @@ guide says otherwise.
 | I want to… | Read |
 | --- | --- |
 | Install SMH and run a Java benchmark | [Getting started](GETTING_STARTED.md) |
+| Measure startup or sustained soak, with mode-specific charts | [Experiment modes](EXPERIMENTS.md) |
 | Configure parameters, timing, and stabilization | [Running benchmarks](USAGE.md) |
 | Build with layers, optimization levels, or PGO | [AOT builds](AOT.md) |
 | Compare against JMH and HotSpot Leyden | [Delegated JMH](AOT.md#delegated-jmh-and-leyden) |

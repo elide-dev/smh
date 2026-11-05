@@ -192,6 +192,9 @@ public class Main implements Runnable {
       mixinStandardHelpOptions = true)
   public static class Bench implements Callable<Integer> {
     @Inject AotBuilder builder;
+    @Inject CallgrindRunner simulationRunner;
+
+    @Mixin ExperimentOptions experiment = new ExperimentOptions();
 
     @Option(names = "--build-config", defaultValue = "smh-build.json")
     Path buildConfig;
@@ -235,9 +238,32 @@ public class Main implements Runnable {
 
     @Override
     public Integer call() throws Exception {
-      // Validate run inputs before paying for compilation. Results themselves are never cached.
-      dev.elide.smh.runtime.RunConfig.read(config.toString());
-      BenchmarkComparison comparison = compare == null ? null : BenchmarkComparison.read(compare);
+      var requested =
+          com.google.gson.JsonParser.parseString(Files.readString(config)).getAsJsonObject();
+      var effective = experiment.apply(requested);
+      var run = dev.elide.smh.runtime.RunConfig.fromJson(effective);
+      boolean simulation = run.backend == dev.elide.smh.runtime.MeasurementBackend.CALLGRIND;
+      if (simulation) effective.remove("output");
+      BenchmarkComparison comparison =
+          compare == null || simulation && !run.mode.equals("startup")
+              ? null
+              : BenchmarkComparison.read(compare);
+      var simulationBaseline =
+          compare != null && simulation && !run.mode.equals("startup")
+              ? SimulationDisplay.read(compare)
+              : null;
+      Path report = null;
+      if (!effective.equals(requested)
+          || !run.mode.equals("steady")
+          || simulation
+          || experiment.output != null) {
+        report = experiment.directory();
+        Files.writeString(report.resolve("requested-run.json"), requested.toString());
+        if (!simulation && !run.mode.equals("startup"))
+          effective.addProperty("output", report.resolve("results.json").toString());
+        config = Files.writeString(report.resolve("run.json"), effective.toString());
+        System.err.println("Experiment files: " + TerminalDisplay.path(report));
+      }
       BuildConfig c = BuildConfig.read(buildConfig, home);
       c.verbose = verbose;
       if (javaHome != null) c.javaHome = javaHome.toAbsolutePath();
@@ -245,27 +271,63 @@ public class Main implements Runnable {
       if (execution != null) c.execution = execution;
       if (runtimeJavaHome != null) c.runtimeJavaHome = runtimeJavaHome.toAbsolutePath();
       if (cremaHost != null) c.cremaHost = cremaHost.toAbsolutePath();
+      if (simulation) {
+        if (!c.execution.equals("aot"))
+          throw new IllegalArgumentException(
+              "Callgrind experiment modes currently require AOT execution");
+        if (c.nativeArgs.stream()
+            .anyMatch(flag -> flag.startsWith("-march=") && !flag.equals("-march=compatibility")))
+          throw new IllegalArgumentException("Callgrind requires -march=compatibility");
+        for (String flag :
+            java.util.List.of("-g", "-H:-DeleteLocalSymbols", "-march=compatibility"))
+          if (!c.nativeArgs.contains(flag)) c.nativeArgs.add(flag);
+      }
+      ProcessBuilder process;
       if (!c.execution.equals("aot")) {
         if (rebuild)
           throw new IllegalArgumentException("--rebuild currently applies to AOT artifacts only");
-        return TerminalDisplay.run(
-            RuntimeExecution.prepare(c, config),
-            "Benchmark · " + c.execution,
-            display,
-            true,
-            comparison);
+        process = RuntimeExecution.prepare(c, config);
+      } else {
+        System.err.println("Checking build inputs…");
+        BuildCache.Result artifact =
+            BuildCache.build(c, rebuild, settings -> builder.build(settings, false));
+        System.err.println(
+            (artifact.hit() ? "Cache hit · " : "Built · ") + artifact.key().substring(0, 12));
+        process = RuntimeExecution.aot(artifact, config);
       }
-      System.err.println("Checking build inputs…");
-      BuildCache.Result artifact =
-          BuildCache.build(c, rebuild, settings -> builder.build(settings, false));
-      System.err.println(
-          (artifact.hit() ? "Cache hit · " : "Built · ") + artifact.key().substring(0, 12));
-      return TerminalDisplay.run(
-          RuntimeExecution.aot(artifact, config),
-          "Benchmark · " + artifact.binary().getFileName(),
-          display,
-          true,
-          comparison);
+      if (run.mode.equals("startup")) {
+        StartupExperiment.run(process, config, report, experiment.valgrind, display, comparison);
+        return 0;
+      }
+      if (simulation) {
+        Path output = report.resolve("simulation");
+        var result =
+            simulationRunner.run(
+                Path.of(process.command().getFirst()), config, output, experiment.valgrind);
+        SimulationDisplay.publish(
+            result,
+            simulationBaseline,
+            display,
+            java.util.Optional.ofNullable(System.console())
+                .map(java.io.Console::isTerminal)
+                .orElse(false),
+            System.getenv(),
+            System.out,
+            System.err,
+            output);
+        return 0;
+      }
+      int status =
+          TerminalDisplay.run(
+              process, "Benchmark · " + c.execution + " · " + run.mode, display, true, comparison);
+      if (status == 0 && report != null && run.output != null) {
+        Files.createDirectories(run.output.toAbsolutePath().getParent());
+        Files.copy(
+            report.resolve("results.json"),
+            run.output,
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+      }
+      return status;
     }
   }
 

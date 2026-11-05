@@ -39,6 +39,9 @@ public final class CallgrindRunner {
     if (platform.os() != Platform.OperatingSystem.LINUX)
       throw new IllegalArgumentException("Callgrind execution currently requires a Linux worker");
     RunConfig settings = RunConfig.read(config.toAbsolutePath().toString());
+    if (settings.mode.equals("startup"))
+      throw new IllegalArgumentException(
+          "Use smh bench --mode startup for process-wide startup simulation");
     if (settings.backend != MeasurementBackend.CALLGRIND)
       throw new IllegalArgumentException(
           "simulate requires backend=callgrind in the run configuration");
@@ -182,14 +185,24 @@ public final class CallgrindRunner {
             "Simulation work budget does not match collected regions");
       JsonArray observations = new JsonArray();
       Set<BigInteger> instructions = new HashSet<>();
-      BigInteger sum = BigInteger.ZERO;
+      BigInteger sum = BigInteger.ZERO, denominator = BigInteger.ZERO;
+      JsonArray operationCounts = result.getAsJsonArray("operationCounts");
+      if (operationCounts != null && operationCounts.size() != iterations)
+        throw new IllegalArgumentException("Simulation operation counts do not match windows");
       for (int i = 0; i < iterations; i++) {
         CallgrindDump dump = measured.get(cursor++);
         JsonObject sample = new JsonObject(), counters = new JsonObject();
         dump.events().forEach((key, value) -> counters.addProperty(key, value.toString()));
         sample.addProperty("index", i);
         sample.addProperty("part", dump.part());
-        sample.addProperty("operations", operations.toString());
+        BigInteger windowOperations =
+            operationCounts == null
+                ? operations
+                : operationCounts.get(i).getAsBigDecimal().toBigIntegerExact();
+        if (windowOperations.signum() <= 0 || windowOperations.compareTo(operations) > 0)
+          throw new IllegalArgumentException("Invalid simulation window operation count");
+        denominator = denominator.add(windowOperations);
+        sample.addProperty("operations", windowOperations.toString());
         sample.add("events", counters);
         observations.add(sample);
         BigInteger ir = dump.events().get("Ir");
@@ -201,10 +214,17 @@ public final class CallgrindRunner {
       result.addProperty("sinkQualification", "unverified");
       result.addProperty(
           "instructionRepeatability",
-          iterations == 1 ? "not-assessed" : instructions.size() == 1 ? "identical" : "varies");
+          iterations == 1
+                  || operationCounts != null
+                      && operationCounts.asList().stream().distinct().count() > 1
+              ? "not-assessed"
+              : instructions.size() == 1 ? "identical" : "varies");
       result.add("observations", observations);
       JsonObject metric = new JsonObject();
-      BigInteger denominator = operations.multiply(BigInteger.valueOf(iterations));
+      if (result.has("requestedOperations")
+          && !denominator.equals(
+              result.get("requestedOperations").getAsBigDecimal().toBigIntegerExact()))
+        throw new IllegalArgumentException("Soak did not complete its exact operation budget");
       metric.addProperty("event", "Ir");
       metric.addProperty("scoreUnit", "instructions/op");
       metric.addProperty("numerator", sum.toString());

@@ -128,8 +128,10 @@ final class SimulationDisplay {
               .getAsJsonObject()
               .getAsJsonObject("events")
               .keySet();
+      boolean soak = new JsonPrimitive("soak").equals(row.get("experimentMode"));
+      if (soak) text.append(ExperimentVisuals.simulationSoak(row, width));
       if (before == null) {
-        trace(text, row, cells);
+        if (!soak) trace(text, row, cells);
         for (String event : ORDER)
           if (!event.equals("Ir") && events.contains(event))
             secondaryScale = secondaryScale.max(mean(row, event));
@@ -247,16 +249,26 @@ final class SimulationDisplay {
         throw new IllegalArgumentException("Invalid simulation work budget");
       Set<String> events = observations.get(0).getAsJsonObject().getAsJsonObject("events").keySet();
       if (!events.contains("Ir")) throw new IllegalArgumentException("Missing instructions");
+      BigInteger totalOperations = BigInteger.ZERO;
       for (JsonElement sample : observations) {
         JsonObject observation = sample.getAsJsonObject(),
             counters = observation.getAsJsonObject("events");
-        if (!operations.equals(observation.get("operations").getAsBigDecimal().toBigIntegerExact())
+        BigInteger window = observation.get("operations").getAsBigDecimal().toBigIntegerExact();
+        totalOperations = totalOperations.add(window);
+        boolean soak = new JsonPrimitive("soak").equals(row.get("experimentMode"));
+        if ((soak
+                ? window.signum() <= 0 || window.compareTo(operations) > 0
+                : !operations.equals(window))
             || !events.equals(counters.keySet()))
           throw new IllegalArgumentException("Inconsistent simulation observations");
         for (JsonElement counter : counters.asMap().values())
           if (counter.getAsBigDecimal().toBigIntegerExact().signum() < 0)
             throw new IllegalArgumentException("Negative event count");
       }
+      if (new JsonPrimitive("soak").equals(row.get("experimentMode"))
+          && !totalOperations.equals(
+              row.get("requestedOperations").getAsBigDecimal().toBigIntegerExact()))
+        throw new IllegalArgumentException("Soak operation budget was not completed");
     }
     if (rows.isEmpty()) throw new IllegalArgumentException("No simulation results");
     return rows;
@@ -272,6 +284,14 @@ final class SimulationDisplay {
   }
 
   static String workDifference(JsonObject current, JsonObject baseline) {
+    String currentMode =
+        current.has("experimentMode") ? current.get("experimentMode").getAsString() : "steady";
+    String baselineMode =
+        baseline.has("experimentMode") ? baseline.get("experimentMode").getAsString() : "steady";
+    if (!currentMode.equals(baselineMode)) return "experimentMode differs or is missing";
+    for (String field : List.of("requestedOperations", "operationCounts"))
+      if (!Objects.equals(current.get(field), baseline.get(field)))
+        return field + " differs or is missing";
     for (String field :
         List.of(
             "region",

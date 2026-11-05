@@ -378,7 +378,14 @@ final class TerminalDisplay {
         JsonObject metric = row.getAsJsonObject("primaryMetric");
         if (comparison != null) {
           table.append(comparisonRow(row, comparison, width));
-          table.append(ResultDetails.conditions(row));
+          if (row.has("smh")
+              && row.getAsJsonObject("smh").has("experimentMode")
+              && !row.getAsJsonObject("smh").get("experimentMode").getAsString().equals("steady")) {
+            List<Double> observations = new ArrayList<>();
+            for (JsonElement fork : metric.getAsJsonArray("rawData"))
+              for (JsonElement value : fork.getAsJsonArray()) observations.add(value.getAsDouble());
+            table.append(ResultDetails.render(row, observations, width));
+          } else table.append(ResultDetails.conditions(row));
           continue;
         }
         table
@@ -572,7 +579,9 @@ final class TerminalDisplay {
         String quantity =
             modes.equals(Set.of("thrpt"))
                 ? "throughput"
-                : modes.contains("thrpt") ? "of each row's metric" : "time";
+                : modes.contains("thrpt") || modes.contains("startup")
+                    ? "of each row's metric"
+                    : "time";
         err.println(
             "\n  "
                 + DIM

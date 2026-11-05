@@ -15,8 +15,13 @@ record CallgrindDump(
     String creator,
     String trigger,
     Map<String, String> caches,
-    Map<String, BigInteger> events) {
+    Map<String, BigInteger> events,
+    Map<String, BigInteger> attributedEvents) {
   static CallgrindDump parse(String text) {
+    return parse(text, false);
+  }
+
+  static CallgrindDump parse(String text, boolean aggregate) {
     Map<String, String> fields = new HashMap<>();
     Map<String, String> caches = new TreeMap<>();
     String trigger = null;
@@ -48,16 +53,28 @@ record CallgrindDump(
         || names.stream().anyMatch(n -> !n.matches("[A-Za-z][A-Za-z0-9_]*")))
       throw new IllegalArgumentException("Invalid Callgrind event inventory");
     Map<String, BigInteger> summary = counts(names, required(fields, "summary"));
-    if (!summary.equals(counts(names, required(fields, "totals"))))
+    Map<String, BigInteger> totals = counts(names, required(fields, "totals"));
+    // Process-wide summaries can include costs without a call-graph attribution (format §3.2.2).
+    // Benchmark-region import remains stricter: every collected event must be attributed.
+    if (aggregate
+        ? names.stream().anyMatch(name -> totals.get(name).compareTo(summary.get(name)) > 0)
+        : !summary.equals(totals))
       throw new IllegalArgumentException("Callgrind summary and totals disagree");
     return new CallgrindDump(
         positive(fields, "pid"),
         positive(fields, "part"),
-        positive(fields, "thread"),
+        aggregate ? aggregateThread(fields) : positive(fields, "thread"),
         creator,
         trigger,
         Map.copyOf(caches),
-        Map.copyOf(summary));
+        Map.copyOf(summary),
+        Map.copyOf(totals));
+  }
+
+  private static int aggregateThread(Map<String, String> fields) {
+    if (fields.containsKey("thread"))
+      throw new IllegalArgumentException("Expected process-wide Callgrind data");
+    return 0;
   }
 
   private static String required(Map<String, String> fields, String key) {

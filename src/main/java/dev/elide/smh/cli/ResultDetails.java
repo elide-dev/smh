@@ -24,6 +24,10 @@ final class ResultDetails {
   }
 
   static String render(JsonObject row, List<Double> samples, int width) {
+    if (row.has("smh")
+        && row.getAsJsonObject("smh").has("experimentMode")
+        && !row.getAsJsonObject("smh").get("experimentMode").getAsString().equals("steady"))
+      return ExperimentVisuals.render(row, samples, width);
     List<Double> finite = samples.stream().filter(Double::isFinite).toList();
     StringBuilder result = new StringBuilder();
     if (!finite.isEmpty()) {
@@ -102,7 +106,7 @@ final class ResultDetails {
     return counts;
   }
 
-  private static List<String> distribution(List<Double> samples, int width) {
+  static List<String> distribution(List<Double> samples, int width) {
     double min = Collections.min(samples), max = Collections.max(samples);
     int labelWidth = Integer.toString(samples.size()).length();
     int columns = (width - labelWidth - 2) / 2;
@@ -130,7 +134,11 @@ final class ResultDetails {
     return lines;
   }
 
-  private static List<String> sequence(List<Double> samples, int width) {
+  static List<String> sequence(List<Double> samples, int width) {
+    return sequence(samples, width, null);
+  }
+
+  static List<String> sequence(List<Double> samples, int width, List<Double> positions) {
     double min = Collections.min(samples), max = Collections.max(samples);
     String top = number(max), bottom = number(min);
     if (max != min && top.equals(bottom)) {
@@ -138,11 +146,19 @@ final class ResultDetails {
       bottom = Double.toString(min);
     }
     int labelWidth = Math.max(top.length(), bottom.length());
-    int columns = Math.min(samples.size(), width - labelWidth - 2);
+    int columns =
+        positions == null
+            ? Math.min(samples.size(), width - labelWidth - 2)
+            : width - labelWidth - 2;
     int[] low = new int[columns], high = new int[columns];
     Arrays.fill(low, HEIGHT - 1);
     for (int i = 0; i < samples.size(); i++) {
-      int column = (int) ((long) i * columns / samples.size());
+      int column =
+          positions == null
+              ? (int) ((long) i * columns / samples.size())
+              : Math.min(
+                  columns - 1,
+                  (int) (fraction(positions.get(i), 0, positions.getLast()) * columns));
       int level = (int) Math.round(fraction(samples.get(i), min, max) * (HEIGHT - 1));
       low[column] = Math.min(low[column], level);
       high[column] = Math.max(high[column], level);
@@ -161,6 +177,11 @@ final class ResultDetails {
       lines.add(line.append(RESET).toString());
     }
     lines.add(DIM + " ".repeat(labelWidth + 1) + "└" + "─".repeat(columns) + RESET);
+    if (positions != null) {
+      for (String tick : axis(0, positions.getLast(), columns))
+        lines.add(DIM + " ".repeat(labelWidth + 2) + tick + RESET);
+      return lines;
+    }
     lines.add(
         DIM
             + " ".repeat(labelWidth + 2)
@@ -211,7 +232,8 @@ final class ResultDetails {
       boolean quietStatus =
           Set.of("not-assessed", "unknown", "stable").contains(status.toLowerCase(Locale.ROOT));
       boolean success =
-          Set.of("", "fixed-count", "converged").contains(reason.toLowerCase(Locale.ROOT));
+          Set.of("", "fixed-count", "converged", "duration-reached", "operations-reached")
+              .contains(reason.toLowerCase(Locale.ROOT));
       if (quietStatus && success) continue;
       result
           .append("    ")

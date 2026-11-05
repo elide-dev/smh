@@ -150,3 +150,28 @@ failed training, and degraded cache-loading logs; those fixtures are not JVM pro
 To verify an extracted distribution, add `--home /path/to/sdk` and
 `--cli /path/to/sdk/smh` to `tools/test_jmh.py`. This executes the same checks
 through the packaged native CLI and JARs, including installations with spaces.
+
+## Experiment modes
+
+After SDK/JVM packaging, run the fresh-process and sustained-work checks
+sequentially with native compilation:
+
+```sh
+mise run test-experiments -- --execution hotspot --java-home /path/to/jdk
+mise run test-experiments -- --execution hotspot-c2 --java-home /path/to/jdk
+mise run native-crema
+mise run test-experiments -- --execution crema --java-home /path/to/jdk
+mise run test-experiments -- --execution aot --java-home /path/to/graalvm
+mise run test-experiments -- --execution aot --simulation --java-home /path/to/graalvm --valgrind /path/to/valgrind
+mise run test-experiments -- --execution aot --simulation --layers --java-home /path/to/graalvm --valgrind /path/to/valgrind
+```
+
+Use `--cli build/smh` to exercise the packaged native CLI as the parent launcher.
+Each invocation keeps configurations, command arguments, stdout JSON, ANSI
+charts, and an evidence receipt under `build/experiment-tests/`. These checks
+exercise all startup endpoints, distinct process IDs, full soak budgets,
+partial final simulation windows, retained observations, and cleanup failures.
+Wall checks also place a deliberate delay after the endpoint. They do not
+establish cross-engine equivalence or performance accuracy. JVM tests separately
+exercise deterministic timing, lifecycle failures, malformed simulator dumps,
+comparison identity, and chart widths from 40 to 160 columns.

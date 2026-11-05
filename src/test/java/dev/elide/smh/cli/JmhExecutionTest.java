@@ -461,4 +461,12 @@ class JmhExecutionTest {
     Files.writeString(logs.resolve("ignored.json"), "[error][aot]");
     JmhExecution.verifyCache(logs, raw(), cache);
   }
+
+  @Test
+  void experimentModesCannotMasqueradeAsDelegatedSteadyResults() {
+    for (String json : List.of("{'mode':'startup'}", "{'mode':'soak','durationNanos':1}")) {
+      RunConfig run = RunConfig.fromJson(JsonParser.parseString(json));
+      assertThrows(IllegalArgumentException.class, () -> JmhExecution.arguments(run, 1));
+    }
+  }
 }

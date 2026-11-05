@@ -251,6 +251,55 @@ class CliTest {
     assertEquals(0, bench.call());
     assertTrue(calls.get() > compiled);
     assertEquals(3, Files.readAllLines(executions).size());
+    bench.simulationRunner =
+        new CallgrindRunner(
+            (command, stdout, stderr) -> {
+              if (command.contains("--version")) Files.writeString(stdout, "valgrind-3.25.1");
+              else {
+                Path destination = stdout.getParent();
+                Files.writeString(
+                    destination.resolve("execution.json"),
+                    "[{\"benchmark\":\"work\",\"params\":{},\"backend\":\"callgrind\",\"status\":\"pending-counter-import\",\"measurementIterations\":1,\"operationsPerIteration\":3}]");
+                Files.writeString(
+                    destination.resolve("callgrind.out.17.1"),
+                    StartupExperimentTest.dump(1, "--dump-after=" + CallgrindRunner.REGION, "100")
+                        + "thread: 1\n");
+                Files.writeString(
+                    destination.resolve("callgrind.out.17"),
+                    StartupExperimentTest.dump(2, "Program termination", "0") + "thread: 1\n");
+              }
+              return 0;
+            },
+            Platform.parse("Linux", "amd64"));
+    Files.writeString(run, "{\"backend\":\"callgrind\",\"invocationsPerIteration\":3}");
+    bench.config = run;
+    bench.compare = null;
+    bench.display = TerminalDisplay.Mode.tui;
+    bench.experiment.output = directory.resolve("simulation");
+    assertEquals(0, bench.call());
+    Path simBaseline = bench.experiment.output.resolve("simulation/results.json");
+    bench.config = run;
+    bench.compare = simBaseline;
+    bench.experiment.output = directory.resolve("simulation-compare");
+    assertEquals(0, bench.call());
+    // Repeated compiler flags remain single entries; conflicting CPU targets fail before build.
+    extras = new com.google.gson.JsonArray();
+    for (String flag : java.util.List.of("-g", "-H:-DeleteLocalSymbols", "-march=compatibility"))
+      extras.add(flag);
+    build.add("nativeArgs", extras);
+    Files.writeString(config, build.toString());
+    bench.config = run;
+    bench.experiment.output = directory.resolve("simulation-flags");
+    assertEquals(0, bench.call());
+    extras.add("-march=native");
+    Files.writeString(config, build.toString());
+    bench.config = run;
+    bench.experiment.output = directory.resolve("simulation-conflict");
+    assertThrows(IllegalArgumentException.class, bench::call);
+    Files.writeString(run, "{\"mode\":\"startup\",\"backend\":\"callgrind\"}");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> bench.simulationRunner.run(source, run, directory.resolve("rejected"), "valgrind"));
     assertEquals(0, invoke("bench", "--help").status);
     // A real compiler failure goes through the default command/logging path.
     assertNotEquals(0, invoke("build", "--config", config.toString(), "--verbose").status);
@@ -298,6 +347,96 @@ class CliTest {
             "plain");
     assertEquals(0, executed.status, executed.stderr);
     assertTrue(Files.readString(results).contains("hotspot-c2"));
+    Output startup =
+        invoke(
+            "bench",
+            "--build-config",
+            config.toString(),
+            "--config",
+            runConfig.toString(),
+            "--execution",
+            "hotspot-c2",
+            "--mode",
+            "startup",
+            "--launches",
+            "1",
+            "--output",
+            directory.resolve("startup").toString(),
+            "--display",
+            "tui");
+    assertEquals(0, startup.status, startup.stderr);
+    assertTrue(startup.stderr.contains("Launch distribution"));
+    Output soak =
+        invoke(
+            "bench",
+            "--build-config",
+            config.toString(),
+            "--config",
+            runConfig.toString(),
+            "--execution",
+            "hotspot-c2",
+            "--mode",
+            "soak",
+            "--duration",
+            "1ms",
+            "--output",
+            directory.resolve("soak").toString(),
+            "--display",
+            "tui");
+    assertEquals(0, soak.status, soak.stderr);
+    assertTrue(soak.stderr.contains("Window distribution"));
+    Output unsupported =
+        invoke(
+            "bench",
+            "--build-config",
+            config.toString(),
+            "--config",
+            runConfig.toString(),
+            "--execution",
+            "hotspot",
+            "--mode",
+            "startup",
+            "--backend",
+            "callgrind");
+    assertNotEquals(0, unsupported.status);
+    assertTrue(unsupported.stderr.contains("require AOT"));
+    Path startupSimulation =
+        Files.writeString(
+            directory.resolve("startup-simulation.json"),
+            "{\"mode\":\"startup\",\"backend\":\"callgrind\"}");
+    Output comparedSimulation =
+        invoke(
+            "bench",
+            "--build-config",
+            config.toString(),
+            "--config",
+            startupSimulation.toString(),
+            "--execution",
+            "hotspot",
+            "--compare",
+            directory.resolve("startup/results.json").toString());
+    assertNotEquals(0, comparedSimulation.status);
+    assertTrue(comparedSimulation.stderr.contains("require AOT"), comparedSimulation.stderr);
+    Path soakPolicy =
+        Files.writeString(
+            directory.resolve("soak-policy.json"),
+            "{\"mode\":\"soak\",\"durationNanos\":1000,\"warmupIterations\":0}");
+    Output budgetOnly =
+        invoke(
+            "bench",
+            "--build-config",
+            config.toString(),
+            "--config",
+            soakPolicy.toString(),
+            "--execution",
+            "hotspot",
+            "--output",
+            directory.resolve("budget-only").toString(),
+            "--display",
+            "plain");
+    assertEquals(0, budgetOnly.status, budgetOnly.stderr);
+    assertTrue(Files.exists(directory.resolve("budget-only/results.json")));
+
     assertNotEquals(
         0,
         invoke(

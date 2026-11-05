@@ -10,7 +10,14 @@ import java.util.*;
  * Descriptive score changes only. Matching identities do not establish experimental comparability.
  */
 final class BenchmarkComparison {
-  private record Key(String benchmark, String mode, JsonObject params, String unit) {}
+  private record Key(
+      String benchmark,
+      String mode,
+      JsonObject params,
+      String unit,
+      String experiment,
+      JsonElement endpoint,
+      JsonElement model) {}
 
   private final Map<Key, Double> scores = new HashMap<>();
   private final Set<String> origins = new LinkedHashSet<>();
@@ -44,9 +51,13 @@ final class BenchmarkComparison {
 
   private static Key key(JsonObject row) {
     JsonObject smh = row.getAsJsonObject("smh");
-    if (smh == null || !"wall".equals(smh.get("backend").getAsString()))
+    if (smh == null
+        || !("wall".equals(smh.get("backend").getAsString())
+            || new JsonPrimitive("callgrind").equals(smh.get("backend"))
+                && new JsonPrimitive("startup").equals(smh.get("experimentMode"))
+                && smh.has("simulationModel")))
       throw new IllegalArgumentException(
-          "Comparison requires SMH wall results or explicitly adapted JMH results");
+          "Comparison requires SMH wall, startup simulation, or adapted JMH results");
     JsonObject execution = smh.getAsJsonObject("execution");
     if (execution != null
         && execution.has("purpose")
@@ -57,7 +68,10 @@ final class BenchmarkComparison {
         row.get("benchmark").getAsString(),
         row.get("mode").getAsString(),
         row.getAsJsonObject("params"),
-        row.getAsJsonObject("primaryMetric").get("scoreUnit").getAsString());
+        row.getAsJsonObject("primaryMetric").get("scoreUnit").getAsString(),
+        smh.has("experimentMode") ? smh.get("experimentMode").getAsString() : "steady",
+        smh.get("endpoint"),
+        smh.get("simulationModel"));
   }
 
   private static double score(JsonObject row) {

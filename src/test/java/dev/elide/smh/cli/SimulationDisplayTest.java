@@ -372,4 +372,35 @@ class SimulationDisplayTest {
     assertTrue(output.contains("bad?[2J?name"));
     assertTrue(output.contains("bad?purpose"));
   }
+
+  @Test
+  void soakUsesActualWindowBudgetsAndKeepsTimelineWithBaseline() {
+    JsonObject report = report("100", "60");
+    JsonObject row = row(report);
+    row.addProperty("experimentMode", "soak");
+    row.addProperty("requestedOperations", 30);
+    row.add("operationCounts", JsonParser.parseString("[20,10]"));
+    sample(report, 1).addProperty("operations", "10");
+    assertEquals(1, SimulationDisplay.rows(report).size());
+    assertTrue(render(report, null, 140).contains("Completed operations"));
+    assertTrue(render(report, report, 140).contains("Window distribution"));
+    JsonObject changed = row.deepCopy();
+    changed.addProperty("requestedOperations", 40);
+    assertTrue(SimulationDisplay.workDifference(row, changed).contains("requestedOperations"));
+    changed = row.deepCopy();
+    changed.add("operationCounts", JsonParser.parseString("[10,20]"));
+    assertTrue(SimulationDisplay.workDifference(row, changed).contains("operationCounts"));
+    changed = row.deepCopy();
+    changed.addProperty("experimentMode", "steady");
+    assertTrue(SimulationDisplay.workDifference(row, changed).contains("experimentMode"));
+    JsonObject old = report("100"), current = old.deepCopy();
+    row(current).addProperty("experimentMode", "steady");
+    assertEquals("", SimulationDisplay.workDifference(row(current), row(old)));
+    for (String count : List.of("0", "21")) {
+      sample(report, 1).addProperty("operations", count);
+      assertThrows(IllegalArgumentException.class, () -> SimulationDisplay.rows(report));
+    }
+    sample(report, 1).addProperty("operations", "9");
+    assertThrows(IllegalArgumentException.class, () -> SimulationDisplay.rows(report));
+  }
 }

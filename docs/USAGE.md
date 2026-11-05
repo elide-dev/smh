@@ -278,3 +278,6 @@ different output directories is not a cross-process build lock.
 The nested sample's `elide run bench` first builds its application with Elide and
 packages a deterministic JAR, then invokes `smh bench`. Unchanged application bytes
 therefore preserve the native cache key. See its [guide](../examples/invoice-app/README.md).
+
+See [Experiment modes](EXPERIMENTS.md) for fresh-process startup boundaries,
+full-budget soak, and the different wall-time and simulated-work axes.

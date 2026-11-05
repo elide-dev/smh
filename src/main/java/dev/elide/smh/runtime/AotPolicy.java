@@ -16,6 +16,6 @@ public final class AotPolicy {
         "-DcompilerBlackholesEnabled=true",
         "--initialize-at-build-time=org.openjdk.jmh.infra.Blackhole",
         "-H:+UnlockExperimentalVMOptions",
-        "-H:NeverInline=dev.elide.smh.generated.Benchmarks$B*.invoke,dev.elide.smh.runtime.SimulationRunner.measureBatch");
+        "-H:NeverInline=dev.elide.smh.generated.Benchmarks$B*.invoke,dev.elide.smh.runtime.SimulationRunner.measureBatch,dev.elide.smh.runtime.Startup.reached");
   }
 }

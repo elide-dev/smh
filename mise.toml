@@ -18,6 +18,15 @@ run = "elide run check"
 [tasks.native]
 run = "elide run native"
 
+[tasks."native-crema"]
+run = "python3 tools/build.py crema"
+
+[tasks."test-execution"]
+run = "python3 tools/test_execution.py"
+
+[tasks."test-layers"]
+run = "python3 tools/test_layers.py"
+
 [tasks.test-native]
 depends = ["native"]
 run = "python3 tools/test_native.py"

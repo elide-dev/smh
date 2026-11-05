@@ -9,13 +9,26 @@ import java.nio.file.*;
 /** Completed trials only: publish after teardown, never inside measured work. */
 final class ResultPublisher {
   private final String directory;
+  private final JsonObject execution;
   private int count;
 
   ResultPublisher(String directory) {
+    this(directory, System.getenv("SMH_EXECUTION_IDENTITY"));
+  }
+
+  ResultPublisher(String directory, String identity) {
     this.directory = directory;
+    execution =
+        identity == null
+            ? null
+            : com.google.gson.JsonParser.parseString(identity).getAsJsonObject();
   }
 
   JsonObject publish(JsonObject result) throws IOException {
+    if (execution != null) {
+      result.getAsJsonObject("smh").add("execution", execution.deepCopy());
+      result.add("jvmArgs", execution.getAsJsonArray("runtimeArgs").deepCopy());
+    }
     if (directory != null) {
       Path root = Path.of(directory);
       Path pending = root.resolve("pending.json");

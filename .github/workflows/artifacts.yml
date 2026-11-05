@@ -38,6 +38,12 @@ jobs:
         run: python tools/build.py native
       - name: Smoke-test native CLI
         run: build/smh --help
+      - name: Build and exercise Crema/Ristretto and HotSpot/C2 hosts
+        run: |
+          python tools/build.py crema
+          python tools/test_execution.py
+      - name: Prepare compatible O2 runtime layer
+        run: build/smh build --config examples/build.json --base-only
       - name: Package SDK and native tools
         run: python tools/package_release.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

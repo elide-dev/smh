@@ -645,4 +645,39 @@ class BenchmarkProcessorTest {
     assertFalse(bad.success);
     assertTrue(bad.diagnostics.contains("Unsupported ABI target"), bad.diagnostics);
   }
+
+  @Test
+  void runtimeLoadedHostExecutesTheGeneratedSuiteAndRestoresContextLoader() throws Throwable {
+    Compilation compiled =
+        compile(
+            work(
+                "@State(Scope.Thread)",
+                "private int count; @Benchmark public int run() { return ++count; }"));
+    assertTrue(compiled.success, compiled.diagnostics);
+    Path result = directory.resolve("host-results.json");
+    com.google.gson.JsonObject settings = new com.google.gson.JsonObject();
+    settings.addProperty("output", result.toString());
+    settings.addProperty("warmupIterations", 0);
+    settings.addProperty("measurementIterations", 1);
+    settings.addProperty("measurementNanos", 10000);
+    Path config = Files.writeString(directory.resolve("host.json"), settings.toString());
+    ClassLoader before = Thread.currentThread().getContextClassLoader();
+    BenchmarkHost.main(new String[] {config.toString(), compiled.classes.toString()});
+    assertSame(before, Thread.currentThread().getContextClassLoader());
+    var rows = com.google.gson.JsonParser.parseString(Files.readString(result)).getAsJsonArray();
+    assertEquals(1, rows.size());
+    assertEquals("example.Work.run", rows.get(0).getAsJsonObject().get("benchmark").getAsString());
+    assertThrows(IllegalArgumentException.class, () -> BenchmarkHost.main(new String[0]));
+    assertThrows(
+        ClassNotFoundException.class,
+        () ->
+            BenchmarkHost.main(
+                new String[] {config.toString(), directory.resolve("absent").toString()}));
+    settings.addProperty("include", "no-match");
+    Files.writeString(config, settings.toString());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> BenchmarkHost.main(new String[] {config.toString(), compiled.classes.toString()}));
+    assertSame(before, Thread.currentThread().getContextClassLoader());
+  }
 }

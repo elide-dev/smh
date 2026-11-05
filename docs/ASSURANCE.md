@@ -67,7 +67,7 @@ libraries, or compiler sinks have been exercised.
 | Callgrind | O2 monolithic/layered runs, repeatability, affine work scaling, fixture/warmup exclusion, rejected disabled/unbounded collection | More native hosts/profiles, online convergence, Codspeed |
 | PGO and layers | Monolithic instrument/train/use and optimization-aware layer builds | Layered instrumentation where supported, shared profile dumping, concurrent immutable cache publication |
 | FFI | Six-target Myna generation/C ABI lowering, real Linux shared image, failure cleanup and full fingerprint checks | Real SVM on other hosts, SVM instrumentation, FFI fuzzing and additional threads |
-| JIT | Explicit `jitQuiescence: unknown` | JIT/Crema execution and compilation/deoptimization event stabilization |
+| JIT | Explicit `jitQuiescence: unknown`; runtime-loaded Crema/Ristretto and HotSpot/C2 validation records benchmark compilation diagnostics | Compilation/deoptimization event stabilization, sink qualification, and cross-runtime accuracy |
 
 Local compiler evidence uses Oracle GraalVM 25.3.4.1 / JDK 25.0.4.1 on Linux
 amd64. Historical development artifacts live under ignored `build/qualification/`,
@@ -303,6 +303,49 @@ the existing native invoice fixture. CodSpeed artifacts are retained under
 `build/codspeed-tests/20261105T160344324394Z/`. Final local production coverage is
 2468/2470 lines (99.92%) and 1460/1467 branches (99.52%); the math kernel remains 100%.
 Hosted validation must still pass for the amended candidate.
+
+## Runtime-loaded execution and build reuse (2026-11-05)
+
+Local Linux amd64 validation used Oracle GraalVM 25.3.4.1+1.1 / JDK 25.0.4.1.
+`tools/test_execution.py` compiles a stateful benchmark, checks cold/unchanged/
+changed-source bytecode caching, and executes the same generated workload on
+HotSpot/C2 and the native Crema/Ristretto host. C2 evidence is an XML `nmethod`
+installation with `compiler='c2'`; Crema evidence is a Ristretto code-map entry
+for the benchmark method. Raw diagnostics, result JSON, build/run configuration,
+artifact identities, and scoped timings remain under `build/execution-tests/`.
+The verified Crema host SHA-256 is
+`96a00f2681e8dbd18e4439329faf6327e6c7ac8826e663d7df8a7724a7c216ce`.
+Its bundle contains the executable and eleven companion native libraries;
+loading checks the native inventory and SDK dependency digests before execution.
+
+The host preserves `java.base`, the SMH runtime API, and JMH's blackhole API.
+Initial negative runs without preservation failed on runtime allocation of
+`BenchmarkSpec` and an unreachable `List.of` overload. Their diagnostics were
+retained locally; successful timing output was not accepted as a substitute for
+resolving those failures. The payload loader stays alive through teardown and
+restores the thread context loader on success and failure.
+
+`tools/test_layers.py` produced local evidence under
+`build/layer-tests/run-q8cqcbor/`: two concurrent producers with different output
+roots compiled one base layer; a relocated SDK reused that layer for changed
+benchmark builds; a deployed executable ran with both original SDK and image
+directories hidden. Layer identity was
+`d5f99cf6c026db248e45bc42e90de71f97f6913cb3d0c4da354b0c72e748916d`.
+Unit tests cover corrupted/incomplete layer receipts, failed publication,
+bytecode invalidation, incompatible host manifests, and restoration after failure.
+Release bundle tests reject mismatched hosts and corrupt companion libraries.
+
+These are functional and compilation observations, not cross-runtime accuracy or
+blackhole qualification. C2 can optimize the harness together with workload code;
+Crema crosses the AOT-host/runtime-loaded adapter boundary. Runtime-loaded results
+retain `jitCompilation: unverified` and `jitQuiescence: unknown`; external
+validation logs do not turn every later run into a qualified one. Diagnostic and
+training results are excluded from score deltas. JMH delegation, JIT-event
+stabilization, additional JDK modules, and the broader platform matrix remain
+open. Cache checks detect changed inputs before publication but do not freeze
+external files during compilation or execution. Two concurrent producers are not crash-stress
+or distributed-filesystem qualification. Local build timings include their stated
+preparation/process scope and are not portable latency guarantees.
 
 ## Repository and release integrity
 

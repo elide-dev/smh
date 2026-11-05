@@ -11,6 +11,10 @@ import java.util.*;
 public final class BuildConfig {
   public Path home;
   public Path javaHome;
+  public Path runtimeJavaHome;
+  public Path cremaHost;
+  public String execution = "aot";
+  public final List<String> runtimeArgs = new ArrayList<>();
   public Path output;
   public final List<Path> sources = new ArrayList<>();
   public final List<Path> classpath = new ArrayList<>();
@@ -43,6 +47,10 @@ public final class BuildConfig {
         Set.of(
             "home",
             "javaHome",
+            "runtimeJavaHome",
+            "cremaHost",
+            "execution",
+            "runtimeArgs",
             "output",
             "sources",
             "classpath",
@@ -70,6 +78,13 @@ public final class BuildConfig {
     j.getAsJsonArray("sources")
         .forEach(v -> c.sources.add(base.resolve(v.getAsString()).normalize()));
     if (j.has("javaHome")) c.javaHome = base.resolve(j.get("javaHome").getAsString()).normalize();
+    if (j.has("runtimeJavaHome"))
+      c.runtimeJavaHome = base.resolve(j.get("runtimeJavaHome").getAsString()).normalize();
+    if (j.has("cremaHost"))
+      c.cremaHost = base.resolve(j.get("cremaHost").getAsString()).normalize();
+    if (j.has("execution")) c.execution = j.get("execution").getAsString();
+    if (j.has("runtimeArgs"))
+      j.getAsJsonArray("runtimeArgs").forEach(v -> c.runtimeArgs.add(v.getAsString()));
     if (j.has("classpath"))
       j.getAsJsonArray("classpath")
           .forEach(v -> c.classpath.add(base.resolve(v.getAsString()).normalize()));
@@ -95,6 +110,22 @@ public final class BuildConfig {
   }
 
   public void validate() {
+    if (!Set.of("aot", "crema", "hotspot-c2").contains(execution))
+      throw new IllegalArgumentException("execution must be aot, crema or hotspot-c2");
+    if (!execution.equals("aot") && (shared || !pgo.equals("off") || observer != null))
+      throw new IllegalArgumentException(
+          "Runtime-loaded execution does not support shared libraries, PGO or custom observers");
+    for (String arg : runtimeArgs)
+      if (!(arg.startsWith("-D")
+              || arg.startsWith("-Xms")
+              || arg.startsWith("-Xmx")
+              || arg.startsWith("-XX:"))
+          || arg.contains("UseJVMCICompiler")
+          || arg.contains("TieredCompilation")
+          || arg.contains("JITCompilation")
+          || arg.contains("UseCompiler"))
+        throw new IllegalArgumentException(
+            "Unsupported or compiler-changing runtime argument: " + arg);
     if (nativeImage.isEmpty() || nativeImage.stream().anyMatch(String::isBlank))
       throw new IllegalArgumentException("nativeImage must be a nonempty executable/argument list");
     if (!Set.of("0", "1", "2", "3", "b", "s").contains(optimization))

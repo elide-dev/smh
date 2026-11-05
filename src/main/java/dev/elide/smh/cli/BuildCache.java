@@ -31,8 +31,13 @@ final class BuildCache {
 
   static Result build(BuildConfig config, boolean rebuild, Compiler compiler, Identity identity)
       throws Exception {
-    config.validate();
     if (config.shared) throw new IllegalArgumentException("smh bench requires an executable build");
+    return artifact(config, rebuild, compiler, identity);
+  }
+
+  static Result artifact(BuildConfig config, boolean rebuild, Compiler compiler, Identity identity)
+      throws Exception {
+    config.validate();
     Path output = config.output;
     Path root = output.resolve(".smh-cache").toAbsolutePath();
     Files.createDirectories(root);
@@ -114,11 +119,25 @@ final class BuildCache {
   }
 
   static String fingerprint(BuildConfig c, boolean windows) throws Exception {
+    return fingerprint(c, windows, false);
+  }
+
+  static String bytecodeFingerprint(BuildConfig c) throws Exception {
+    return fingerprint(c, false, true);
+  }
+
+  private static String fingerprint(BuildConfig c, boolean windows, boolean bytecode)
+      throws Exception {
     MessageDigest digest = MessageDigest.getInstance("SHA-256");
-    add(digest, "smh-build-cache-v1");
-    add(digest, c.output.toAbsolutePath().normalize().toString());
-    add(digest, c.optimization + "/" + c.pgo + "/" + c.layers + "/" + c.shared + "/" + c.observer);
-    add(digest, c.nativeArgs.toString());
+    add(digest, bytecode ? "smh-bytecode-v1" : "smh-build-cache-v2");
+    add(digest, Objects.toString(c.observer, ""));
+    if (!bytecode) {
+      add(digest, c.output.toAbsolutePath().normalize().toString());
+      add(
+          digest,
+          c.optimization + "/" + c.pgo + "/" + c.layers + "/" + c.shared + "/" + c.observer);
+      add(digest, c.nativeArgs.toString());
+    }
     add(digest, System.getProperty("os.name") + "/" + System.getProperty("os.arch"));
     add(digest, environmentIdentity(System.getenv()));
     for (Path source : c.sources) {
@@ -132,12 +151,13 @@ final class BuildCache {
     tree(digest, c.home.resolve("smh-runtime.jar"));
     tree(digest, c.home.resolve("lib"));
     for (Path extra : c.cacheInputs) tree(digest, extra);
-    if (c.profile != null) tree(digest, c.profile);
-    tool(digest, c.nativeImage);
-    tool(digest, JavaCompiler.command(c.javaHome));
+    if (!bytecode && c.profile != null) tree(digest, c.profile);
+    Map<Path, String> hashes = new HashMap<>();
+    if (!bytecode) tool(digest, c.nativeImage, hashes);
+    tool(digest, JavaCompiler.command(c.javaHome), hashes);
     // Track the host C compiler as well; additional native dependencies belong in cacheInputs.
     String cc = System.getenv().getOrDefault("CC", "gcc");
-    if (!windows) tool(digest, List.of(cc));
+    if (!bytecode && !windows) tool(digest, List.of(cc), hashes);
     return HexFormat.of().formatHex(digest.digest());
   }
 
@@ -172,18 +192,23 @@ final class BuildCache {
   }
 
   private static void tool(MessageDigest digest, List<String> command) throws Exception {
-    add(digest, command.toString());
+    tool(digest, command, new HashMap<>());
+  }
+
+  private static void tool(MessageDigest digest, List<String> command, Map<Path, String> hashes)
+      throws Exception {
+    add(digest, command.subList(1, command.size()).toString());
     Path executable = executable(command.getFirst());
-    tree(digest, executable);
+    tree(digest, executable, hashes);
     // A launcher hash alone does not identify its compiler implementation. Hash the JDK tree
     // when present, and Elide's adjacent lib directory for its embedded compiler/runtime.
     Path installation = executable.toAbsolutePath().getParent().getParent();
     if (Files.isRegularFile(installation.resolve("release"))) {
-      tree(digest, installation.resolve("release"));
-      tree(digest, installation.resolve("lib"));
+      tree(digest, installation.resolve("release"), hashes);
+      tree(digest, installation.resolve("lib"), hashes);
     } else if (Files.isDirectory(installation.resolve("conf"))) {
-      tree(digest, installation.resolve("conf"));
-      tree(digest, installation.resolve("lib"));
+      tree(digest, installation.resolve("conf"), hashes);
+      tree(digest, installation.resolve("lib"), hashes);
     }
     List<String> probe = new ArrayList<>(command);
     probe.add("--version");
@@ -211,7 +236,16 @@ final class BuildCache {
   }
 
   private static void tree(MessageDigest digest, Path path) throws Exception {
-    add(digest, path.toAbsolutePath().normalize().toString());
+    tree(digest, path, null);
+  }
+
+  private static void tree(MessageDigest digest, Path path, Map<Path, String> hashes)
+      throws Exception {
+    add(
+        digest,
+        hashes == null
+            ? path.toAbsolutePath().normalize().toString()
+            : path.getFileName().toString());
     if (Files.isDirectory(path)) {
       try (var paths = Files.walk(path)) {
         for (Path file : paths.sorted().toList()) {
@@ -220,11 +254,21 @@ final class BuildCache {
                 "Directory symlinks require an explicit resolved cache input: " + file);
           if (Files.isRegularFile(file)) {
             add(digest, path.relativize(file).toString());
-            add(digest, hash(file));
+            add(digest, hash(file, hashes));
           }
         }
       }
-    } else add(digest, hash(path));
+    } else add(digest, hash(path, hashes));
+  }
+
+  private static String hash(Path path, Map<Path, String> hashes) throws Exception {
+    if (hashes == null) return hash(path);
+    Path key = path.toRealPath();
+    String cached = hashes.get(key);
+    if (cached != null) return cached;
+    String value = hash(path);
+    hashes.put(key, value);
+    return value;
   }
 
   static String hash(Path path) throws Exception {

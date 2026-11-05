@@ -86,8 +86,84 @@ target, dependencies, options, and profile contents. Keep generated layer
 libraries beside the executable. Use `--no-layers` for a monolithic image or a
 compiler without compatible layer support.
 
-Do not rebuild the SDK JARs while a native build is using them. Cache publication
-and immutable input snapshots for concurrent builds remain open work.
+Do not rebuild the SDK JARs while a native build is using them. Base-layer
+producers use a shared file lock and publish checksummed archives atomically.
+Executable and bytecode caches use immutable generations and check input
+contents again before publishing. These checks detect changes; they do not
+provide an immutable snapshot of external inputs during compilation.
+
+### Prepare once, reuse across builds
+
+```sh
+smh build --config examples/build.json --base-only
+smh build --config examples/build.json --bytecode-only
+```
+
+The first command prepares just the runtime layer. The second compiles sources
+and generated adapters without invoking Native Image. Bytecode is cached under
+`HOME/bytecode`, shared across AOT optimization variants and runtime-loaded
+execution. Native executables remain separately cached by `smh bench`.
+
+Release packaging includes a separate Linux amd64 layers archive. Extract it
+into the SDK directory to install `layers/<identity>/smh-base.nil` and its
+checksum. Reuse requires matching compiler contents/version, target, runtime
+dependencies, flags, and profile. Installation paths are not part of the layer
+identity. A different build variant creates its own layer; SMH never substitutes
+an incompatible prebuilt layer.
+
+### Crema/Ristretto and HotSpot/C2
+
+Execution is independent of the measurement backend. These commands run SMH's
+wall-clock harness with the same generated workload adapters:
+
+```sh
+smh bench --build-config smh-build.json --config smh-run.json --execution aot
+smh bench --build-config smh-build.json --config smh-run.json --execution crema
+smh bench --build-config smh-build.json --config smh-run.json \
+  --execution hotspot-c2 --runtime-java-home /path/to/jdk25
+```
+
+`javaHome` selects javac; `runtimeJavaHome` selects the JVM used for execution.
+Keep javac fixed when comparing execution modes. The C2 preset disables JVMCI
+compilation and tiered compilation explicitly. Unsupported VM flags fail the
+run. This requests C2; compilation evidence and quiescence remain separate.
+
+Crema uses the reusable `crema/smh-crema` native worker inside the SDK. Build it once
+with `mise run native-crema`, or install the matching Crema release archive.
+`SMH_NATIVE_IMAGE` selects its native-image executable. The host is built with
+`-H:+RuntimeClassLoading` and `-H:+GraalJITCompileAtRuntime`, preserving
+`java.base`, SMH's runtime API, and JMH's blackhole API for runtime-loaded callers.
+Additional JDK modules are not currently qualified. `cremaHost` or
+`--crema-host` selects a host with an adjacent `.json` build manifest; its binary
+and runtime dependency digests must match. Keep its companion JDK libraries in
+the same directory; the manifest verifies every native file in the bundle.
+
+Both runtime-loaded modes launch a fresh process. Only benchmark bytecode,
+dependencies, and generated adapters enter the payload classloader. The host
+owns timers, calibration, lifecycle orchestration, statistics, and reporting.
+Reflection resolves the suite once before measurements; invocations use the
+typed adapter interface. Crema retains that interface boundary between AOT host
+code and runtime-loaded code, which is part of the measured execution model.
+
+`runtimeArgs` accepts system properties, heap options, and diagnostic `-XX:`
+options, with compiler-selection overrides rejected. Raw reports retain the
+execution backend, requested compiler, complete launch command, payload key,
+host identity, and runtime flags. JIT compilation and quiescence are not inferred
+from stable timings. Trace-enabled runtime runs are labeled diagnostic, and
+`smh bench` labels native PGO instrumentation as training. Neither may be used
+for performance deltas. Shared-library execution, custom observers, PGO, and
+Callgrind are currently unsupported for runtime-loaded modes.
+
+`mise run test-execution` records cold, unchanged, and changed-source bytecode
+preparation times, then exercises both hosts with compilation diagnostics. Its
+timings identify their scope and are local observations, not portable latency
+guarantees.
+
+JMH delegation is a separate future harness integration. A JMH job has its own
+warmup, forks, sinks, and timing semantics. Its native JSON must retain that
+identity; it must not be relabeled as an SMH measurement. Current `--compare`
+accepts SMH wall results only and reports descriptive deltas, not equivalence
+between execution models or statistical significance.
 
 ## Profile-guided optimization
 

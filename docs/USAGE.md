@@ -141,8 +141,10 @@ reflection.
 | `@OutputTimeUnit`, `@OperationsPerInvocation` | Score units and operation normalization. |
 | `@Threads(1)`, `@Fork(1)` | Single-worker/single-process declarations. Other counts and JVM fork arguments are rejected. |
 
-Groups, multiple workers, JMH runner internals, and JIT/Crema execution are outside
-the current API. Setup failure rolls back completed states; a failing setup
+Groups, multiple workers, and JMH runner internals are outside
+the current API. SMH supports runtime-loaded Crema/Ristretto and HotSpot/C2 wall
+benchmarks; see [execution and build reuse](AOT.md#cremaristretto-and-hotspotc2).
+Setup failure rolls back completed states; a failing setup
 method must release its own partially acquired resources. Teardown attempts all
 completed states in reverse order and retains subsequent failures as suppressed
 exceptions. See the [lifecycle contract](MEASUREMENT.md#region-state-machine).

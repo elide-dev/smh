@@ -37,7 +37,7 @@ public final class BenchmarkProcessor extends AbstractProcessor {
               "package dev.elide.smh.generated;\n"
                   + "import java.util.*;\n"
                   + "import dev.elide.smh.runtime.*;\n"
-                  + "public final class Benchmarks {\n"
+                  + "public final class Benchmarks implements BenchmarkSuite {\n"
                   + "public static List<BenchmarkSpec> all() { return List.of(\n");
       List<String> descriptors = new ArrayList<>();
       List<String> adapters = new ArrayList<>();
@@ -329,14 +329,20 @@ public final class BenchmarkProcessor extends AbstractProcessor {
       }
       source.append(String.join(",\n", descriptors)).append("); }\n");
       adapters.forEach(source::append);
-      source.append("}\n");
-      write("dev.elide.smh.generated.Benchmarks", source.toString());
+
       String observer = processingEnv.getOptions().get("smh.observer");
       if (observer != null)
         require(
             observer.matches("[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)*"),
             methods.getFirst(),
             "Observer must be a Java class name");
+      source.append("public List<BenchmarkSpec> benchmarks() { return all(); }\n");
+      source
+          .append("public dev.elide.smh.runtime.Observer observer() { return ")
+          .append(
+              observer == null ? "dev.elide.smh.runtime.Observer.NONE" : "new " + observer + "()")
+          .append("; }\n}\n");
+      write("dev.elide.smh.generated.Benchmarks", source.toString());
       write(
           "dev.elide.smh.generated.Main",
           """

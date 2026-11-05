@@ -118,7 +118,14 @@ class AotPlanningTest {
     Plan first = plan(c);
     assertTrue(first.commands.contains("-Asmh.observer=example.CustomObserver"));
     Path layer = c.home.resolve("layers").resolve(first.key()).resolve("smh-base.nil");
+    Files.createDirectories(layer.getParent());
     Files.writeString(layer, "cached-layer planning fixture");
+    Files.writeString(
+        layer.resolveSibling("SHA256"),
+        HexFormat.of()
+            .formatHex(
+                java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(Files.readAllBytes(layer))));
     Plan cached = plan(c);
     assertFalse(cached.commands.contains("-H:LayerCreate"));
     assertTrue(cached.commands.contains("-H:LayerUse=" + layer));

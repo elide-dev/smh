@@ -47,6 +47,12 @@ or Linux Callgrind instruction/cache simulation against those artifacts, with
 explicit measurement boundaries and retained raw observations. The Rust bootstrap
 also lets a native host drive a benchmark compiled as a shared library.
 
+For a faster edit/run cycle, the reusable Crema/Ristretto host loads benchmark
+bytecode while keeping SMH's measurement machinery AOT compiled. A HotSpot/C2
+execution mode runs the same generated workloads for comparison. Both reuse the
+bytecode cache and retain their execution identity in results. See
+[execution modes and build reuse](docs/AOT.md#cremaristretto-and-hotspotc2).
+
 ## Run your first benchmark
 
 From a checkout, with [mise](https://mise.jdx.dev), Python 3, GraalVM JDK 25

@@ -14,6 +14,25 @@ class ResultPublisherTest {
   @TempDir Path directory;
 
   @Test
+  void executionIdentityAndFlagsArePreservedWithoutAliasingRows() throws Exception {
+    var publisher =
+        new ResultPublisher(
+            null, "{\"backend\":\"hotspot-c2\",\"runtimeArgs\":[\"-XX:-TieredCompilation\"]}");
+    JsonObject first = new JsonObject();
+    first.add("smh", new JsonObject());
+    publisher.publish(first);
+    assertEquals("-XX:-TieredCompilation", first.getAsJsonArray("jvmArgs").get(0).getAsString());
+    first.getAsJsonObject("smh").getAsJsonObject("execution").addProperty("backend", "changed");
+    JsonObject second = new JsonObject();
+    second.add("smh", new JsonObject());
+    publisher.publish(second);
+    assertEquals(
+        "hotspot-c2",
+        second.getAsJsonObject("smh").getAsJsonObject("execution").get("backend").getAsString());
+    assertThrows(JsonParseException.class, () -> new ResultPublisher(null, "not json"));
+  }
+
+  @Test
   void completedReportsPublishAtomicallyInOrderAndFailuresPropagate() throws Exception {
     var row = new JsonObject();
     row.addProperty("benchmark", "one");

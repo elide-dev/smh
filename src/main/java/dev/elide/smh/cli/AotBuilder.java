@@ -34,64 +34,23 @@ public class AotBuilder {
   }
 
   public Path build(BuildConfig c, boolean dryRun) throws Exception {
+    return build(c, dryRun, false);
+  }
+
+  public Path build(BuildConfig c, boolean dryRun, boolean baseOnly) throws Exception {
     c.validate();
+    if (!c.execution.equals("aot"))
+      throw new IllegalArgumentException("Use smh bench for runtime-loaded execution");
+    if (baseOnly && !c.layers) throw new IllegalArgumentException("--base-only requires layers");
     Platform platform = Platform.current();
     Files.createDirectories(c.output);
     if (!dryRun) Files.deleteIfExists(c.output.resolve("build.json"));
-    List<Path> libraries;
-    try (var stream = Files.list(c.home.resolve("lib"))) {
-      libraries = stream.filter(p -> p.toString().endsWith(".jar")).sorted().toList();
-    }
-    List<Path> runtime = new ArrayList<>(List.of(c.home.resolve("smh-runtime.jar")));
-    libraries.stream()
-        .filter(
-            p -> p.getFileName().toString().matches("(gson|jmh-core|nativeimage|word)-.*\\.jar"))
-        .forEach(runtime::add);
-    List<Path> javaSources = new ArrayList<>();
-    for (Path source : c.sources) {
-      if (Files.isDirectory(source))
-        try (var paths = Files.walk(source)) {
-          paths.filter(p -> p.toString().endsWith(".java")).sorted().forEach(javaSources::add);
-        }
-      else if (Files.isRegularFile(source) && source.toString().endsWith(".java"))
-        javaSources.add(source);
-      else throw new IllegalArgumentException("Missing Java source: " + source);
-    }
-    if (javaSources.isEmpty()) throw new IllegalArgumentException("No Java sources found");
-    org.slf4j.LoggerFactory.getLogger(AotBuilder.class)
-        .debug("Planning {} benchmark source files in {}", javaSources.size(), c.output);
-    Path classes = c.output.resolve("classes"), generated = c.output.resolve("generated");
-    if (!dryRun) {
-      remove(classes);
-      remove(generated);
-    }
-    Files.createDirectories(classes);
-    Files.createDirectories(generated);
-    List<Path> processor = new ArrayList<>(List.of(c.home.resolve("smh.jar")));
-    processor.addAll(libraries);
-    List<Path> compileCp = new ArrayList<>(runtime);
-    compileCp.addAll(c.classpath);
-    List<String> compile = new ArrayList<>(JavaCompiler.command(c.javaHome));
-    compile.addAll(
-        List.of(
-            "--release",
-            "25",
-            "-cp",
-            classpath(compileCp),
-            "-processorpath",
-            classpath(processor),
-            "-processor",
-            "dev.elide.smh.processor.BenchmarkProcessor",
-            "-s",
-            generated.toString(),
-            "-d",
-            classes.toString()));
-    if (c.observer != null) compile.add("-Asmh.observer=" + c.observer);
-    compile.add("-Asmh.target=" + platform.targetTriple());
-    javaSources.forEach(p -> compile.add(p.toString()));
-    execute(compile, c.output, dryRun, c.verbose);
-    if (!dryRun && !Files.exists(classes.resolve("dev/elide/smh/generated/Main.class")))
-      throw new IllegalArgumentException("No @Benchmark methods found");
+    List<Path> runtime = BytecodeBuilder.runtime(c);
+    Path classes =
+        baseOnly
+            ? null
+            : BytecodeBuilder.build(
+                c, dryRun, (command, cwd) -> execute(command, cwd, false, c.verbose));
     List<String> flags = new ArrayList<>(List.of("--no-fallback", "-O" + c.optimization));
     // JMH's padding check assumes HotSpot layout. Its compiler-only path does not use
     // tombstone fields: initialize the flag/check on the builder JVM, never against SVM layout.
@@ -109,14 +68,14 @@ public class AotBuilder {
     List<String> identity =
         new ArrayList<>(
             List.of(
-                c.nativeImage.toString(),
+                c.nativeImage.subList(1, c.nativeImage.size()).toString(),
                 version,
                 System.getProperty("os.name"),
                 System.getProperty("os.arch")));
     identity.add(BuildCache.compilerIdentity(c.nativeImage));
     identity.addAll(flags);
     for (Path path : runtime)
-      identity.add(path.toRealPath() + ":" + digest(Files.readAllBytes(path)));
+      identity.add(path.getFileName() + ":" + digest(Files.readAllBytes(path)));
     if (c.profile != null) identity.add("profile:" + digest(Files.readAllBytes(c.profile)));
     String key =
         digest(String.join("\n", identity).getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -125,8 +84,7 @@ public class AotBuilder {
     List<String> app = new ArrayList<>(c.nativeImage);
     app.addAll(flags);
     if (c.layers) {
-      Files.createDirectories(layerDir);
-      if (!Files.isRegularFile(layer)) {
+      {
         List<String> base = new ArrayList<>(c.nativeImage);
         base.addAll(flags);
         base.addAll(
@@ -137,7 +95,13 @@ public class AotBuilder {
                 "-o",
                 platform.layerImageName("smh-base-" + key.substring(0, 16))));
         try {
-          execute(base, layerDir, dryRun, c.verbose);
+          if (dryRun) {
+            if (!LayerCache.valid(layerDir)) execute(base, layerDir, true, c.verbose);
+          } else
+            LayerCache.prepare(
+                layerDir,
+                platform.sharedLibrary("smh-base-" + key.substring(0, 16)),
+                staging -> execute(base, staging, false, c.verbose));
         } catch (IOException failure) {
           if (!c.pgo.equals("off"))
             throw new IOException(
@@ -151,6 +115,7 @@ public class AotBuilder {
       if (!platform.loaderOrigin().isEmpty())
         app.add("-H:NativeLinkerOption=-Wl,-rpath," + platform.loaderOrigin());
     }
+    if (baseOnly) return layer;
     List<Path> applicationCp = new ArrayList<>(runtime);
     applicationCp.addAll(c.classpath);
     applicationCp.add(classes);
@@ -208,13 +173,6 @@ public class AotBuilder {
 
   private static String digest(byte[] value) throws NoSuchAlgorithmException {
     return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value));
-  }
-
-  private static void remove(Path path) throws IOException {
-    if (Files.exists(path))
-      try (var paths = Files.walk(path)) {
-        for (Path p : paths.sorted(Comparator.reverseOrder()).toList()) Files.delete(p);
-      }
   }
 
   private void execute(List<String> command, Path cwd, boolean dryRun, boolean verbose)

@@ -31,8 +31,15 @@ final class BenchmarkComparison {
 
   private static Key key(JsonObject row) {
     JsonObject smh = row.getAsJsonObject("smh");
-    if (!"wall".equals(smh.get("backend").getAsString()))
-      throw new IllegalArgumentException("Comparison requires SMH wall results");
+    if (smh == null || !"wall".equals(smh.get("backend").getAsString()))
+      throw new IllegalArgumentException(
+          "Comparison requires SMH wall results; other harnesses require an explicit adapter");
+    JsonObject execution = smh.getAsJsonObject("execution");
+    if (execution != null
+        && execution.has("purpose")
+        && !execution.get("purpose").getAsString().equals("measurement"))
+      throw new IllegalArgumentException(
+          "Diagnostic and training results cannot be used for performance deltas");
     return new Key(
         row.get("benchmark").getAsString(),
         row.get("mode").getAsString(),

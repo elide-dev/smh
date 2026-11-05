@@ -71,4 +71,22 @@ class BenchmarkComparisonTest {
     simulation.getAsJsonObject("smh").addProperty("backend", "callgrind");
     assertThrows(IllegalArgumentException.class, () -> new BenchmarkComparison(rows(simulation)));
   }
+
+  @Test
+  void diagnosticAndTrainingRunsNeverAppearAsPerformanceDeltas() {
+    var foreign = row(100);
+    foreign.remove("smh");
+    assertThrows(IllegalArgumentException.class, () -> new BenchmarkComparison(rows(foreign)));
+    var measured = row(100);
+    var identity = new com.google.gson.JsonObject();
+    measured.getAsJsonObject("smh").add("execution", identity);
+    var baseline = new BenchmarkComparison(rows(measured));
+    identity.addProperty("purpose", "measurement");
+    assertEquals(0, baseline.change(measured).orElseThrow());
+    for (String purpose : java.util.List.of("diagnostic", "training")) {
+      identity.addProperty("purpose", purpose);
+      assertThrows(IllegalArgumentException.class, () -> new BenchmarkComparison(rows(measured)));
+      assertThrows(IllegalArgumentException.class, () -> baseline.change(measured));
+    }
+  }
 }

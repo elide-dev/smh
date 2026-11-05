@@ -65,7 +65,7 @@ class BuilderExecutionTest {
   }
 
   @Test
-  void artifactLifecycleCleansStaleClassesExtractsLayersAndRecordsAConsistentManifest()
+  void artifactLifecycleReusesImmutableBytecodeExtractsLayersAndRecordsAConsistentManifest()
       throws Exception {
     BuildConfig c = config();
     Path stale = c.output.resolve("classes/old/stale.class");
@@ -86,8 +86,8 @@ class BuilderExecutionTest {
             });
     Path binary = builder.build(c, false);
     assertEquals(3, executed.size());
-    assertFalse(Files.exists(stale));
-    assertFalse(Files.exists(oldSource));
+    assertTrue(Files.exists(stale), "Old output is not used as cached bytecode");
+    assertTrue(Files.exists(oldSource));
     assertEquals("native-executable marker", Files.readString(binary));
     var manifest =
         JsonParser.parseString(Files.readString(c.output.resolve("build.json"))).getAsJsonObject();
@@ -99,7 +99,7 @@ class BuilderExecutionTest {
     assertEquals("native-library marker", Files.readString(c.output.resolve(library)));
     executed.clear();
     builder.build(c, false);
-    assertEquals(2, executed.size(), "A cached base is reused; application compilation still runs");
+    assertEquals(1, executed.size(), "Both bytecode and base are reused; only native linking runs");
     c.layers = false;
     builder.build(c, false);
     assertFalse(
@@ -107,6 +107,7 @@ class BuilderExecutionTest {
             .getAsJsonObject()
             .get("layered")
             .getAsBoolean());
+    Files.writeString(c.sources.getFirst(), "changed");
     assertThrows(
         IllegalArgumentException.class, () -> new AotBuilder((command, cwd) -> {}).build(c, false));
     assertFalse(

@@ -121,6 +121,20 @@ class CliTest {
     assertTrue(overridden.stderr.contains(Platform.current().executable("javac")));
     assertTrue(overridden.stderr.contains("--pgo=" + profile));
     assertFalse(overridden.stderr.contains("-H:LayerUse"));
+    Output base = invoke("build", "--config", file.toString(), "--base-only", "--dry-run");
+    assertEquals(0, base.status, base.stderr);
+    assertFalse(base.stderr.contains("--release"));
+    assertTrue(base.stdout.strip().endsWith("smh-base.nil"));
+    assertNotEquals(
+        0,
+        invoke("build", "--config", file.toString(), "--base-only", "--no-layers", "--dry-run")
+            .status);
+    assertNotEquals(
+        0,
+        invoke("build", "--config", file.toString(), "--base-only", "--bytecode-only", "--dry-run")
+            .status);
+    assertEquals(
+        0, invoke("build", "--config", file.toString(), "--bytecode-only", "--dry-run").status);
   }
 
   @Test
@@ -240,5 +254,64 @@ class CliTest {
     assertEquals(0, invoke("bench", "--help").status);
     // A real compiler failure goes through the default command/logging path.
     assertNotEquals(0, invoke("build", "--config", config.toString(), "--verbose").status);
+  }
+
+  @Test
+  void runtimeLoadedCliExecutesOnC2WithoutNativeImage() throws Exception {
+    Path source =
+        Files.writeString(
+            directory.resolve("Work.java"),
+            "package example; public class Work { private int n;"
+                + " @org.openjdk.jmh.annotations.Benchmark public int work() { return ++n; } }");
+    JsonObject build = new JsonObject();
+    build.addProperty("home", Path.of("build").toAbsolutePath().toString());
+    build.addProperty("nativeImage", "unavailable-native-image");
+    build.addProperty("javaHome", System.getProperty("java.home"));
+    com.google.gson.JsonArray sources = new com.google.gson.JsonArray();
+    sources.add(source.toString());
+    build.add("sources", sources);
+    Path config = Files.writeString(directory.resolve("build.json"), build.toString());
+    Path results = directory.resolve("results.json");
+    JsonObject run = new JsonObject();
+    run.addProperty("output", results.toString());
+    run.addProperty("warmupIterations", 0);
+    run.addProperty("measurementIterations", 1);
+    run.addProperty("measurementNanos", 10000);
+    Path runConfig = Files.writeString(directory.resolve("run.json"), run.toString());
+    assertEquals(0, invoke("build", "--config", config.toString(), "--bytecode-only").status);
+    // Change bytes to exercise the benchmark command's real javac path too.
+    Files.writeString(source, Files.readString(source).replace("++n", "n += 3"));
+    Output executed =
+        invoke(
+            "bench",
+            "--build-config",
+            config.toString(),
+            "--config",
+            runConfig.toString(),
+            "--execution",
+            "hotspot-c2",
+            "--runtime-java-home",
+            System.getProperty("java.home"),
+            "--crema-host",
+            directory.resolve("unused-host").toString(),
+            "--display",
+            "plain");
+    assertEquals(0, executed.status, executed.stderr);
+    assertTrue(Files.readString(results).contains("hotspot-c2"));
+    assertNotEquals(
+        0,
+        invoke(
+                "bench",
+                "--build-config",
+                config.toString(),
+                "--config",
+                runConfig.toString(),
+                "--execution",
+                "hotspot-c2",
+                "--rebuild")
+            .status);
+    build.addProperty("execution", "crema");
+    Files.writeString(config, build.toString());
+    assertNotEquals(0, invoke("build", "--config", config.toString(), "--dry-run").status);
   }
 }

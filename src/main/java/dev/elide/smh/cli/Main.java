@@ -142,6 +142,16 @@ public class Main implements Runnable {
     @Option(names = "--dry-run", description = "Print compiler commands without executing them")
     boolean dryRun;
 
+    @Option(
+        names = "--base-only",
+        description = "Prepare the reusable runtime layer without compiling benchmarks")
+    boolean baseOnly;
+
+    @Option(
+        names = "--bytecode-only",
+        description = "Prepare cached benchmark bytecode without native compilation")
+    boolean bytecodeOnly;
+
     @Override
     public Integer call() throws Exception {
       BuildConfig c = BuildConfig.read(config, home);
@@ -153,7 +163,18 @@ public class Main implements Runnable {
       if (output != null) c.output = output.toAbsolutePath();
       if (noLayers) c.layers = false;
       if (shared) c.shared = true;
-      System.out.println(TerminalDisplay.path(builder.build(c, dryRun)));
+      if (bytecodeOnly) {
+        if (baseOnly) throw new IllegalArgumentException("Choose --bytecode-only or --base-only");
+        c.validate();
+        System.out.println(
+            TerminalDisplay.path(
+                BytecodeBuilder.build(
+                    c, dryRun, (command, cwd) -> AotBuilder.runCommand(command, cwd, c.verbose))));
+        return 0;
+      }
+      System.out.println(
+          TerminalDisplay.path(
+              baseOnly ? builder.build(c, dryRun, true) : builder.build(c, dryRun)));
       return 0;
     }
   }
@@ -177,6 +198,19 @@ public class Main implements Runnable {
 
     @Option(names = "--java-home")
     Path javaHome;
+
+    @Option(names = "--execution", description = "aot, crema or hotspot-c2")
+    String execution;
+
+    @Option(
+        names = "--runtime-java-home",
+        description = "JDK used to execute HotSpot/C2 benchmarks")
+    Path runtimeJavaHome;
+
+    @Option(
+        names = "--crema-host",
+        description = "Prebuilt native SMH host with Crema and Ristretto")
+    Path cremaHost;
 
     @Option(names = {"-O", "--optimization"})
     String optimization;
@@ -202,13 +236,26 @@ public class Main implements Runnable {
       c.verbose = verbose;
       if (javaHome != null) c.javaHome = javaHome.toAbsolutePath();
       if (optimization != null) c.optimization = optimization;
+      if (execution != null) c.execution = execution;
+      if (runtimeJavaHome != null) c.runtimeJavaHome = runtimeJavaHome.toAbsolutePath();
+      if (cremaHost != null) c.cremaHost = cremaHost.toAbsolutePath();
+      if (!c.execution.equals("aot")) {
+        if (rebuild)
+          throw new IllegalArgumentException("--rebuild currently applies to AOT artifacts only");
+        return TerminalDisplay.run(
+            RuntimeExecution.prepare(c, config),
+            "Benchmark · " + c.execution,
+            display,
+            true,
+            comparison);
+      }
       System.err.println("Checking build inputs…");
       BuildCache.Result artifact =
           BuildCache.build(c, rebuild, settings -> builder.build(settings, false));
       System.err.println(
           (artifact.hit() ? "Cache hit · " : "Built · ") + artifact.key().substring(0, 12));
       return TerminalDisplay.run(
-          new ProcessBuilder(artifact.binary().toString(), config.toAbsolutePath().toString()),
+          RuntimeExecution.aot(artifact, config),
           "Benchmark · " + artifact.binary().getFileName(),
           display,
           true,

@@ -461,4 +461,26 @@ class TerminalDisplayTest {
       assertEquals("/log.txt", TerminalDisplay.path(zip.getPath("/log.txt")));
     }
   }
+
+  @Test
+  void footerDistinguishesExecutionModelsAndDiagnosticRuns() {
+    var results = new com.google.gson.JsonArray();
+    for (String backend : java.util.List.of("aot", "crema", "hotspot-c2")) {
+      var row = BenchmarkComparisonTest.row(100);
+      row.addProperty("vmName", "VM");
+      row.addProperty("jdkVersion", "25");
+      var execution = new com.google.gson.JsonObject();
+      execution.addProperty("backend", backend);
+      execution.addProperty("purpose", backend.equals("crema") ? "diagnostic" : "measurement");
+      row.getAsJsonObject("smh").add("execution", execution);
+      results.add(row);
+    }
+    var bytes = new ByteArrayOutputStream();
+    TerminalDisplay.footer(results.toString(), new PrintStream(bytes), null);
+    assertTrue(bytes.toString().contains("crema · VM"));
+    assertTrue(bytes.toString().contains("hotspot-c2 · VM"));
+    assertTrue(bytes.toString().contains("aot · VM"));
+    assertTrue(bytes.toString().contains("diagnostic run"));
+    assertFalse(bytes.toString().contains("measurement run"));
+  }
 }

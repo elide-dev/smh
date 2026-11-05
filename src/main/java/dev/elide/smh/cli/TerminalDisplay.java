@@ -511,9 +511,18 @@ final class TerminalDisplay {
       var modes = new LinkedHashSet<String>();
       for (var value : JsonParser.parseString(json).getAsJsonArray()) {
         var row = value.getAsJsonObject();
+        var smh = row.getAsJsonObject("smh");
+        var execution = smh == null ? null : smh.getAsJsonObject("execution");
+        String engine =
+            execution == null ? "" : clean(execution.get("backend").getAsString()) + " · ";
+        if (execution != null
+            && execution.has("purpose")
+            && !execution.get("purpose").getAsString().equals("measurement"))
+          qualifications.add(clean(execution.get("purpose").getAsString()) + " run");
         if (row.has("vmName"))
           environments.add(
-              clean(row.get("vmName").getAsString())
+              engine
+                  + clean(row.get("vmName").getAsString())
                   + " · JDK "
                   + clean(row.get("jdkVersion").getAsString()));
         if (row.has("smh") && row.getAsJsonObject("smh").has("accuracy"))

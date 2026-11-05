@@ -11,6 +11,19 @@ qualification are independent dimensions. Backends report capabilities; missing
 capabilities produce explicit unsupported outcomes. They are never silently
 replaced by another measurement method.
 
+The runtime-loaded hosts use SMH's generated benchmark suite contract. Crema
+keeps the measurement loop AOT compiled while its adapters and workload classes
+are runtime loaded; HotSpot/C2 can compile both harness and workload. The
+AOT-to-runtime-loaded call boundary is therefore an explicit part of the Crema
+execution model. All hosts retain fixture ordering and integer operation counts.
+Execution metadata records compiler selection and host/payload identity; it
+does not establish that a particular method compiled or that JIT activity stopped.
+Validation records compilation diagnostics separately and keeps quiescence unknown.
+
+Harness identity is another comparison dimension. Delegated JMH is not currently
+implemented. Future JMH results must retain JMH's own forks, warmup, sinks, raw
+observations, and timing semantics, separately from SMH's result schema.
+
 Wall measurements use a monotonic elapsed-time source and integer operation
 counts. Simulation measurements use native simulator event counts and a declared
 work budget. Neither simulator duration nor a normalized instruction score is

@@ -43,12 +43,28 @@ mise run test-calibration
 mise run test-simulation
 mise run qualify-compiler
 mise run qualify-pgo
+mise run native-crema
+mise run test-execution
+mise run test-layers
 ```
 
 PGO needs a supporting compiler distribution. Simulation requires Linux and
 Valgrind. Qualification fixtures inspect compiler output and use deliberately
 broken controls; they do not certify all compiler/CPU measurement boundaries.
 Compiler profiles and frozen inputs must remain attached to their evidence.
+
+`test-execution` requires a JDK 25 HotSpot runtime and the matching Crema host
+bundle. It records bytecode cache behavior and build timings, and requires an
+installed C2 nmethod and a Ristretto code-map entry for the benchmark method.
+Pass `--java-home /path/to/jdk25` to `tools/test_execution.py` to select the JVM.
+Compilation diagnostics qualify those validation runs as diagnostic; neither
+compilation evidence nor timing convergence establishes JIT quiescence.
+
+`test-layers` runs two real native producers against one layer cache, relocates
+the SDK, checks changed/unchanged builds, then runs a deployed image with the
+original image and SDK directories hidden. Evidence is retained under
+`build/execution-tests/` and `build/layer-tests/`. These tests do not replace the
+existing compiler, blackhole, simulation, or ABI qualification tasks.
 
 ## Fuzzing and memory safety
 

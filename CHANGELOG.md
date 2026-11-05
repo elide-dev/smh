@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/elide-dev/smh/compare/v0.1.0...v0.1.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* fall back to a selected JDK when Elide is unavailable ([4aecda2](https://github.com/elide-dev/smh/commit/4aecda2621e68754aa9073ae8ccdb58576e3e881))
+* stage verified release assets before immutable publication ([366a8cd](https://github.com/elide-dev/smh/commit/366a8cd9901337fac149397608138831c56d9274))
+
 ## 0.1.0 (2026-11-05)
 
 

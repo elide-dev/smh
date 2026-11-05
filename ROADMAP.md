@@ -133,6 +133,9 @@ coverage percentage alone is not a compiler/CPU ordering proof.
   Evidence: CallgrindDump malformed/contradictory-input tests, counts beyond 64 bits,
   exact ratios, and actual 13-event Callgrind imports without time-unit substitution.
 - [ ] F03-06: Provide a Codspeed adapter using its supported integration ABI and explicit simulation/wall modes.
+  Partial evidence: `tools/test_codspeed.py` exercises CodSpeed 5.6.3 exec-harness
+  simulation and walltime against the nested Elide application benchmark. This measures
+  the whole native process; custom region ABI integration and score import remain open.
 - [ ] F03-07: Exclude setup, warmup, reporting, and unrelated threads from the selected measurement region.
   Current Callgrind fixture controls pass on Linux amd64; other backends/hosts remain open.
 - [x] F03-08: Publish simulator version, cache model, architecture, invocation count, and raw files.
@@ -157,7 +160,14 @@ renamed wall-clock result. Functional support and backend availability are separ
 - [ ] F04-04: Exclude instrumented runs from final comparisons and report PGO provenance.
 - [ ] F04-05: Probe exact fork/version capabilities, including layered PGO; do not hardcode upstream assumptions.
 - [ ] F04-06: Isolate cache variants by optimization, profile contents, compiler, GC, target ISA, ABI, and sanitizers.
+  Partial evidence: `smh bench` hashes source/dependency/SDK/toolchain contents, options,
+  profiles, environment, and explicit `cacheInputs`; JVM tests exercise invalidation.
+  Undeclared external native dependencies and the full target matrix remain unqualified.
 - [ ] F04-07: Lock concurrent producers; publish complete artifacts atomically; detect stale/corrupt caches.
+  Partial evidence: local executable-cache entries use per-output file locks, immutable
+  generations, atomic receipts, and artifact checksums; failed or changing-input builds
+  do not publish entries. Shared base-layer producers across different output roots
+  still need locking and concurrent native stress evidence.
 - [ ] F04-08: Make cached layers relocatable where the compiler permits and test deployed search paths.
 - [ ] F04-09: Capture effective options and executable/library/profile digests in every report.
 - [ ] F04-10: Add profile compatibility checks and cross-platform PGO qualification.
@@ -226,6 +236,25 @@ architecture or running under emulation does not qualify native timing.
   Evidence: native Micronaut help/build/run checks, CLI/JVM subprocess stdout checks; benchmark runtime excludes logging.
 - [ ] F07-08: Finish JMH-compatible exports and dedicated Bencher/Codspeed/Criterion adapters with golden fixtures.
 - [ ] F07-09: Provide reproducible examples, troubleshooting, report explanations, and a published capability matrix.
+  Partial evidence: the nested invoice application is independently built with Elide and
+  benchmarked from its JAR; `tools/test_invoice.py` validates both parameter cases.
+- [x] F07-10: Provide animated terminal progress and visual result summaries with plain/JSON fallback.
+  Accepted design: make the iteration-score histogram the main result, with readable
+  rounded scores, numeric axes, and restrained semantic color. At wide terminal sizes,
+  show run order beside the distribution; include every observation in the histogram
+  and contiguous min/max trace columns. Baseline comparisons use shared, centered
+  change bars with signed deltas; Callgrind uses event counts and paired bars on a
+  shared zero-based scale. Preserve measurement limits and qualification labels while
+  keeping methodology and exact values in the raw report.
+  Evidence: 115 passing JVM tests, including fixtures for bin counts, constant
+  and extreme samples, width adaptation, units, descriptive comparisons, and simulation
+  identity; passing real native PTYs at 58/100/140 columns for streaming, color,
+  retained observations, redirected JSON, and cursor restoration on SIGINT.
+  Real upstream Callgrind 3.25.1 runs verify single/comparison views and redirected
+  JSON with the rebuilt native CLI. Production coverage remains above 99% for lines
+  and branches; the mathematical kernel remains at 100%. Replay recordings, rendered
+  previews, commands, and artifact hashes are retained under `build/terminal-tests/`;
+  scope and limits are recorded in `docs/ASSURANCE.md`.
 
 ## M8 — security, releases, and OpenSSF
 

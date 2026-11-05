@@ -7,3 +7,6 @@
 __pycache__/
 *.iprof
 /.ruff_cache/
+/examples/invoice-app/build/
+/examples/invoice-app/.dev/
+/examples/invoice-app/.elide/

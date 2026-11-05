@@ -19,6 +19,10 @@ def files(directory):
         if (
             (directory == ROOT and path.name in SKIP)
             or path.name in {"__pycache__", ".git", ".venv"}
+            or (
+                directory == ROOT / "examples/invoice-app"
+                and path.name in {"build", ".dev", ".elide"}
+            )
             or path.is_symlink()
         ):
             continue

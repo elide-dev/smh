@@ -28,6 +28,8 @@ guide says otherwise.
 The [examples directory](../examples) is the source of truth for copyable
 configurations:
 
+- [Invoice application](../examples/invoice-app/README.md): a nested Elide project,
+  packaged application JAR, native SMH benchmark, and real CodSpeed integration.
 - [ArraySum.java](../examples/src/dev/elide/smh/examples/ArraySum.java): parameters,
   setup, average time, and throughput.
 - [build.json](../examples/build.json) and [run.json](../examples/run.json): an O2

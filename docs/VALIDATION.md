@@ -82,3 +82,41 @@ published immutable assets cannot be repaired in place.
 Repository checks and passing tests are evidence, not an OpenSSF Gold rating or
 a proof of measurement accuracy. The [assurance ledger](ASSURANCE.md) distinguishes
 hosted results, local experiments, and outstanding obligations.
+
+## Application, CodSpeed, and terminal integration
+
+```sh
+mise run test-invoice
+# Requires the real CodSpeed CLI 5.6.3; never uploads.
+mise run test-codspeed
+# Requires the native SMH CLI and the invoice benchmark built above; POSIX PTY.
+mise run native
+mise run test-terminal
+```
+
+The application test packages an independent Elide project and benchmarks its JAR.
+The CodSpeed check requires a named native-process simulation region with positive
+instruction totals and three real walltime rounds. It measures the entire fixed-work
+process, not SMH's per-operation region. See the [sample guide](../examples/invoice-app/README.md)
+for instrument scope and debug-info limits.
+
+The invoice check also requires deterministic application JARs, a fresh `smh bench`
+build, and a verified cache hit; both runs retain 100 warmup and 1,000 measurement
+observations per case. JVM tests exercise corruption, changed inputs, failed builds,
+and aligned distribution summaries. A child-process handshake test requires the
+first case to be rendered before the child is allowed to finish.
+
+The terminal check launches the real CLI in pseudo-terminals at 58, 100, and 140
+columns, setting both the kernel terminal size and `COLUMNS`. It checks the histogram
+and wide run-order chart, moving frames, completed-case streaming, one environment
+footer, 24-bit color, and centered comparison bars against a real earlier run.
+Retained JSON is compared with the run's configured output, including all raw
+observations. Redirected output, automatic plain-mode policy, and SIGINT cursor
+restoration are checked separately. Replayable asciinema v2 recordings, including
+their actual terminal sizes, are written under `build/terminal-tests/`.
+
+JVM tests separately cover histogram counts and boundary values, run-order grouping,
+rounded presentation without changing raw values, width adaptation, comparison
+matching, missing/zero/invalid baselines, simulation event bars, exit codes, and
+plain-mode policy. Simulation rendering fixtures establish presentation behavior;
+they do not establish hardware accuracy or real Callgrind execution.

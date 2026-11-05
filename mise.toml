@@ -38,7 +38,7 @@ depends = ["test-jvm"]
 run = "python3 tools/coverage_gate.py .dev/reports/coverage/jvm/jvm-test/jvm-test.xml"
 
 [tasks.lint]
-run = ["actionlint", "python3 tools/license_headers.py", "python3 tools/format_java.py", "ruff check tools tests/python", "ruff format --check tools tests/python", "cargo fmt --all --check", "rustfmt --edition 2024 --check tests/ffi/provider.rs tests/miri-control/src/main.rs", "cargo clippy --locked --all-targets -- -D warnings"]
+run = ["actionlint", "python3 tools/license_headers.py", "python3 tools/format_java.py", "ruff check tools tests/python examples/invoice-app/*.py", "ruff format --check tools tests/python examples/invoice-app/*.py", "cargo fmt --all --check", "rustfmt --edition 2024 --check tests/ffi/provider.rs tests/miri-control/src/main.rs", "cargo clippy --locked --all-targets -- -D warnings"]
 
 [tasks."generate-abi"]
 run = "python3 tools/myna_bindings.py"
@@ -84,3 +84,12 @@ run = "python3 tools/fuzz_callgrind.py --target run-config"
 
 [tasks."test-calibration"]
 run = "python3 tools/test_calibration.py"
+
+[tasks."test-invoice"]
+run = "python3 tools/test_invoice.py"
+
+[tasks."test-codspeed"]
+run = "python3 tools/test_codspeed.py"
+
+[tasks."test-terminal"]
+run = "python3 tools/test_terminal.py"

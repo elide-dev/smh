@@ -1,0 +1,8 @@
+{
+  "include": "InvoiceBenchmark",
+  "output": "build/results.json",
+  "warmupIterations": 100,
+  "warmupNanos": 1000000,
+  "measurementIterations": 1000,
+  "measurementNanos": 1000000
+}

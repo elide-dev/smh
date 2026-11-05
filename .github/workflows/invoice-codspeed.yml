@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+name: Elide application / CodSpeed integration
+'on':
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'examples/invoice-app/**'
+      - 'elide.pkl'
+      - 'mise.toml'
+      - '.github/workflows/invoice-codspeed.yml'
+permissions:
+  contents: read
+concurrency:
+  group: invoice-codspeed-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1, 2026-11-04
+        with:
+          distribution: graalvm
+          version: '25.0'
+          github-token: ${{ github.token }}
+      - name: Install checksum-pinned CodSpeed CLI
+        run: |
+          mkdir -p "$RUNNER_TEMP/codspeed"
+          cd "$RUNNER_TEMP/codspeed"
+          curl --fail --location --silent --show-error \
+            https://github.com/CodSpeedHQ/codspeed/releases/download/v5.6.3/codspeed-runner-x86_64-unknown-linux-musl.tar.gz \
+            --output codspeed.tar.gz
+          echo 'f29532a5cbcb3462bc5d6bcf5570ddb8c8cbfffed579cb48c35d3910ed5f7f00  codspeed.tar.gz' | sha256sum --check
+          tar -xzf codspeed.tar.gz
+          echo "$RUNNER_TEMP/codspeed/codspeed-runner-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+      - name: Build the native SMH CLI
+        run: python tools/build.py native
+      - name: Build application and native benchmark; verify both real CodSpeed instruments
+        run: python tools/test_codspeed.py
+      - name: Exercise true-color terminal output, comparisons, pipes, and SIGINT
+        run: python tools/test_terminal.py
+      - name: Retain measurements, commands, identities, and failures
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: invoice-codspeed-evidence
+          path: |
+            build/invoice-tests/
+            build/codspeed-tests/
+            build/terminal-tests/
+            examples/invoice-app/build/benchmarks/build.json
+          if-no-files-found: error
+          retention-days: 14

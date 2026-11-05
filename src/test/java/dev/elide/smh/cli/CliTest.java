@@ -24,6 +24,18 @@ class CliTest {
 
   private record Output(int status, String stdout, String stderr) {}
 
+  @Test
+  void terminalLoggingKeepsWarningsButSuppressesRoutineInformation() {
+    try (var logging = Main.logging()) {
+      assertFalse(
+          logging.router().route("dev.elide.smh.cli", System.Logger.Level.INFO).isEnabled());
+      assertTrue(
+          logging.router().route("dev.elide.smh.cli", System.Logger.Level.WARNING).isEnabled());
+      assertTrue(
+          logging.router().route("dev.elide.smh.cli", System.Logger.Level.ERROR).isEnabled());
+    }
+  }
+
   private Output invoke(String... args) {
     PrintStream out = System.out, err = System.err;
     ByteArrayOutputStream stdout = new ByteArrayOutputStream(),
@@ -77,10 +89,8 @@ class CliTest {
     Output defaults = invoke("build", "--config", file.toString(), "--dry-run");
     assertEquals(0, defaults.status, defaults.stderr);
     assertEquals(
-        directory
-            .resolve("original")
-            .resolve(Platform.current().executable("benchmarks"))
-            .toString(),
+        TerminalDisplay.path(
+            directory.resolve("original").resolve(Platform.current().executable("benchmarks"))),
         defaults.stdout.strip());
     Path profile = Files.writeString(directory.resolve("training.iprof"), "profile marker");
     Path output = directory.resolve("override");
@@ -105,7 +115,7 @@ class CliTest {
             "--dry-run");
     assertEquals(0, overridden.status, overridden.stderr);
     assertEquals(
-        output.resolve(Platform.current().sharedLibrary("benchmarks")).toString(),
+        TerminalDisplay.path(output.resolve(Platform.current().sharedLibrary("benchmarks"))),
         overridden.stdout.strip());
     assertTrue(overridden.stderr.contains("-O3"));
     assertTrue(overridden.stderr.contains(Platform.current().executable("javac")));
@@ -138,10 +148,97 @@ class CliTest {
     run.profileOutput = directory.resolve("profile.iprof");
     assertThrows(IllegalArgumentException.class, run::call);
     run.bootstrap = null;
+    run.compare =
+        Files.writeString(
+            directory.resolve("baseline.json"),
+            BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(100)).toString());
+    run.display = TerminalDisplay.Mode.plain;
+    assertThrows(IllegalArgumentException.class, run::call);
+    run.compare = null;
     run.binary = Path.of(java());
     run.config = null;
     assertNotEquals(
         0, run.call(), "HotSpot rejects the SVM profile option; failure must propagate");
     assertEquals(0, new CommandLine(new Main.Run()).execute("--help"));
+  }
+
+  @Test
+  void benchBuildsOnceButExecutesEveryTimeAndSupportsOverrides() throws Exception {
+    Path home = Files.createDirectories(directory.resolve("sdk"));
+    Files.writeString(home.resolve("smh.jar"), "processor");
+    Files.writeString(home.resolve("smh-runtime.jar"), "runtime");
+    Files.createDirectory(home.resolve("lib"));
+    boolean windows = Platform.current().os() == Platform.OperatingSystem.WINDOWS;
+    Path tools = Files.createDirectories(directory.resolve("tools/bin"));
+    Path compiler = Files.writeString(tools.resolve("javac"), "#!/bin/sh\necho compiler-v1\n");
+    assertTrue(compiler.toFile().setExecutable(true));
+    Path source = Files.writeString(directory.resolve("Work.java"), "source");
+    JsonObject build = new JsonObject();
+    build.addProperty("home", home.toString());
+    Path javaHome = windows ? Path.of(System.getProperty("java.home")) : tools.getParent();
+    build.addProperty("javaHome", javaHome.toString());
+    build.addProperty("nativeImage", windows ? java() : compiler.toString());
+    build.addProperty("output", directory.resolve("out").toString());
+    build.addProperty("layers", false);
+    var sources = new com.google.gson.JsonArray();
+    sources.add(source.toString());
+    build.add("sources", sources);
+    var extras = new com.google.gson.JsonArray();
+    extras.add(source.toString());
+    build.add("cacheInputs", extras);
+    Path config = Files.writeString(directory.resolve("smh-build.json"), build.toString());
+    Path run = Files.writeString(directory.resolve("smh-run.json"), "{}");
+    Path executions = directory.resolve("executions");
+    var calls = new java.util.concurrent.atomic.AtomicInteger();
+    Main.Bench bench = new Main.Bench();
+    bench.builder =
+        new AotBuilder() {
+          @Override
+          public Path build(BuildConfig settings, boolean dryRun) throws Exception {
+            calls.incrementAndGet();
+            Path binary = settings.output.resolve(windows ? "benchmarks.cmd" : "benchmarks");
+            Files.writeString(
+                binary,
+                windows
+                    ? "@echo off\r\necho run >> \"" + executions + "\"\r\necho []\r\n"
+                    : "#!/bin/sh\necho run >> '" + executions + "'\necho '[]'\n");
+            assertTrue(binary.toFile().setExecutable(true));
+            return binary;
+          }
+        };
+    var parser = new CommandLine(bench);
+    parser.parseArgs(
+        "--build-config", config.toString(), "--config", run.toString(), "--display", "plain");
+    assertEquals(0, bench.call());
+    int compiled = calls.get();
+    assertEquals(0, bench.call());
+    assertEquals(compiled, calls.get());
+    assertEquals(2, Files.readAllLines(executions).size());
+    Path baseline =
+        Files.writeString(
+            directory.resolve("baseline.json"),
+            BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(1)).toString());
+    parser.parseArgs(
+        "--build-config",
+        config.toString(),
+        "--config",
+        run.toString(),
+        "--home",
+        home.toString(),
+        "--java-home",
+        javaHome.toString(),
+        "-O3",
+        "--verbose",
+        "--rebuild",
+        "--display",
+        "tui",
+        "--compare",
+        baseline.toString());
+    assertEquals(0, bench.call());
+    assertTrue(calls.get() > compiled);
+    assertEquals(3, Files.readAllLines(executions).size());
+    assertEquals(0, invoke("bench", "--help").status);
+    // A real compiler failure goes through the default command/logging path.
+    assertNotEquals(0, invoke("build", "--config", config.toString(), "--verbose").status);
   }
 }

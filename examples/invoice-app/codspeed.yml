@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2026 SMH contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Run with either: codspeed run -m simulation / codspeed run -m walltime
+# Whole-process fixed-work measurement, including startup, setup and reporting.
+benchmarks:
+  - name: invoice-native-fixed-work
+    exec: ./build/benchmarks/benchmarks smh-fixed-work.json
+    options:
+      warmup-time: 100ms
+      max-time: 1s
+      max-rounds: 5

@@ -96,7 +96,10 @@ def layer_key():
         check=True,
     )
     executable = "benchmarks.exe" if os.name == "nt" else "benchmarks"
-    require(result.stdout.strip() == str(Path(config["output"]) / executable), result.stdout)
+    require(
+        Path(result.stdout.strip()).resolve() == (Path(config["output"]) / executable).resolve(),
+        result.stdout,
+    )
     return re.search(
         r"-H:LayerUse=.+[/\\]layers[/\\]([0-9a-f]+)[/\\]smh-base.nil", result.stderr
     ).group(1), result.stderr

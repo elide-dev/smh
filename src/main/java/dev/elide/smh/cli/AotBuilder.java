@@ -14,20 +14,23 @@ import java.util.stream.*;
 
 /** Compiles benchmark sources and reuses a base layer only for the same build variant. */
 @Singleton
-public final class AotBuilder {
+public class AotBuilder {
   @FunctionalInterface
   interface Commands {
     void run(List<String> command, Path cwd) throws Exception;
   }
 
   private final Commands commands;
+  private final boolean defaultCommands;
 
   public AotBuilder() {
-    this(AotBuilder::runCommand);
+    commands = AotBuilder::runCommand;
+    defaultCommands = true;
   }
 
   AotBuilder(Commands commands) {
     this.commands = Objects.requireNonNull(commands);
+    defaultCommands = false;
   }
 
   public Path build(BuildConfig c, boolean dryRun) throws Exception {
@@ -56,7 +59,7 @@ public final class AotBuilder {
     }
     if (javaSources.isEmpty()) throw new IllegalArgumentException("No Java sources found");
     org.slf4j.LoggerFactory.getLogger(AotBuilder.class)
-        .info("Planning {} benchmark source files in {}", javaSources.size(), c.output);
+        .debug("Planning {} benchmark source files in {}", javaSources.size(), c.output);
     Path classes = c.output.resolve("classes"), generated = c.output.resolve("generated");
     if (!dryRun) {
       remove(classes);
@@ -86,7 +89,7 @@ public final class AotBuilder {
     if (c.observer != null) compile.add("-Asmh.observer=" + c.observer);
     compile.add("-Asmh.target=" + platform.targetTriple());
     javaSources.forEach(p -> compile.add(p.toString()));
-    execute(compile, c.output, dryRun);
+    execute(compile, c.output, dryRun, c.verbose);
     if (!dryRun && !Files.exists(classes.resolve("dev/elide/smh/generated/Main.class")))
       throw new IllegalArgumentException("No @Benchmark methods found");
     List<String> flags = new ArrayList<>(List.of("--no-fallback", "-O" + c.optimization));
@@ -110,6 +113,7 @@ public final class AotBuilder {
                 version,
                 System.getProperty("os.name"),
                 System.getProperty("os.arch")));
+    identity.add(BuildCache.compilerIdentity(c.nativeImage));
     identity.addAll(flags);
     for (Path path : runtime)
       identity.add(path.toRealPath() + ":" + digest(Files.readAllBytes(path)));
@@ -133,7 +137,7 @@ public final class AotBuilder {
                 "-o",
                 platform.layerImageName("smh-base-" + key.substring(0, 16))));
         try {
-          execute(base, layerDir, dryRun);
+          execute(base, layerDir, dryRun, c.verbose);
         } catch (IOException failure) {
           if (!c.pgo.equals("off"))
             throw new IOException(
@@ -162,7 +166,7 @@ public final class AotBuilder {
             "-o",
             binary.toString()));
     if (!dryRun) Files.deleteIfExists(binary);
-    execute(app, c.output, dryRun);
+    execute(app, c.output, dryRun, c.verbose);
     if (!dryRun && !Files.isRegularFile(binary))
       throw new IOException("Compiler produced no binary: " + binary);
     if (c.layers && !dryRun) {
@@ -213,13 +217,26 @@ public final class AotBuilder {
       }
   }
 
-  private void execute(List<String> command, Path cwd, boolean dryRun) throws Exception {
-    System.err.println(String.join(" ", command));
-    if (!dryRun) commands.run(command, cwd);
+  private void execute(List<String> command, Path cwd, boolean dryRun, boolean verbose)
+      throws Exception {
+    if (dryRun || verbose) System.err.println(String.join(" ", command));
+    if (!dryRun) {
+      if (defaultCommands) runCommand(command, cwd, verbose);
+      else commands.run(command, cwd);
+    }
   }
 
   static void runCommand(List<String> command, Path cwd) throws Exception {
-    int code = new ProcessBuilder(command).directory(cwd.toFile()).inheritIO().start().waitFor();
+    runCommand(command, cwd, false);
+  }
+
+  static void runCommand(List<String> command, Path cwd, boolean verbose) throws Exception {
+    int code =
+        TerminalDisplay.build(
+            new ProcessBuilder(command).directory(cwd.toFile()),
+            "Build · " + Path.of(command.getFirst()).getFileName(),
+            cwd,
+            verbose);
     if (code != 0)
       throw new IOException(
           "Build command failed (exit "

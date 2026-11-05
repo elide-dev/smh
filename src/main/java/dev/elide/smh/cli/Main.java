@@ -16,7 +16,7 @@ import picocli.CommandLine.*;
     name = "smh",
     description = "SubstrateVM Microbenchmark Harness",
     mixinStandardHelpOptions = true,
-    version = "smh 0.1.1", // x-release-please-version
+    version = "smh 0.2.0", // x-release-please-version
     subcommands = {Main.Build.class, Main.Run.class, Main.Simulate.class, Main.Bench.class})
 public class Main implements Runnable {
   public static void main(String[] args) {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/elide-dev/smh/compare/v0.1.1...v0.2.0) (2026-11-05)
+
+
+### Features
+
+* add visual benchmark results and cached application benchmarks ([1101038](https://github.com/elide-dev/smh/commit/11010381de7af9b4d9a21835cb7ae44490d85f0b))
+
 ## [0.1.1](https://github.com/elide-dev/smh/compare/v0.1.0...v0.1.1) (2026-11-05)
 
 

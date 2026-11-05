@@ -89,6 +89,11 @@ public class Main implements Runnable {
     Path home;
 
     @Option(
+        names = "--java-home",
+        description = "JDK home for javac (overrides automatic Elide selection)")
+    Path javaHome;
+
+    @Option(
         names = {"-O", "--optimization"},
         description = "Native Image optimization: 0, 1, 2, 3, b, s")
     String optimization;
@@ -114,6 +119,7 @@ public class Main implements Runnable {
     @Override
     public Integer call() throws Exception {
       BuildConfig c = BuildConfig.read(config, home);
+      if (javaHome != null) c.javaHome = javaHome.toAbsolutePath();
       if (optimization != null) c.optimization = optimization;
       if (pgo != null) c.pgo = pgo;
       if (profile != null) c.profile = profile.toAbsolutePath();

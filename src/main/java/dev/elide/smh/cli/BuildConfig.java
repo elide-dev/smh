@@ -10,6 +10,7 @@ import java.util.*;
 /** Portable build input; paths in JSON are relative to the configuration file. */
 public final class BuildConfig {
   public Path home;
+  public Path javaHome;
   public Path output;
   public final List<Path> sources = new ArrayList<>();
   public final List<Path> classpath = new ArrayList<>();
@@ -39,6 +40,7 @@ public final class BuildConfig {
     Set<String> allowed =
         Set.of(
             "home",
+            "javaHome",
             "output",
             "sources",
             "classpath",
@@ -64,6 +66,7 @@ public final class BuildConfig {
     if (!j.has("sources")) throw new IllegalArgumentException("sources is required");
     j.getAsJsonArray("sources")
         .forEach(v -> c.sources.add(base.resolve(v.getAsString()).normalize()));
+    if (j.has("javaHome")) c.javaHome = base.resolve(j.get("javaHome").getAsString()).normalize();
     if (j.has("classpath"))
       j.getAsJsonArray("classpath")
           .forEach(v -> c.classpath.add(base.resolve(v.getAsString()).normalize()));

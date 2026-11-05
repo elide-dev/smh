@@ -68,24 +68,21 @@ public final class AotBuilder {
     processor.addAll(libraries);
     List<Path> compileCp = new ArrayList<>(runtime);
     compileCp.addAll(c.classpath);
-    List<String> compile =
-        new ArrayList<>(
-            List.of(
-                "elide",
-                "javac",
-                "--",
-                "--release",
-                "25",
-                "-cp",
-                classpath(compileCp),
-                "-processorpath",
-                classpath(processor),
-                "-processor",
-                "dev.elide.smh.processor.BenchmarkProcessor",
-                "-s",
-                generated.toString(),
-                "-d",
-                classes.toString()));
+    List<String> compile = new ArrayList<>(JavaCompiler.command(c.javaHome));
+    compile.addAll(
+        List.of(
+            "--release",
+            "25",
+            "-cp",
+            classpath(compileCp),
+            "-processorpath",
+            classpath(processor),
+            "-processor",
+            "dev.elide.smh.processor.BenchmarkProcessor",
+            "-s",
+            generated.toString(),
+            "-d",
+            classes.toString()));
     if (c.observer != null) compile.add("-Asmh.observer=" + c.observer);
     compile.add("-Asmh.target=" + platform.targetTriple());
     javaSources.forEach(p -> compile.add(p.toString()));

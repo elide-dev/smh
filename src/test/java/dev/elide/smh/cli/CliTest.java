@@ -91,6 +91,8 @@ class CliTest {
             file.toString(),
             "--home",
             home.toString(),
+            "--java-home",
+            System.getProperty("java.home"),
             "-O3",
             "--pgo",
             "use",
@@ -106,6 +108,7 @@ class CliTest {
         output.resolve(Platform.current().sharedLibrary("benchmarks")).toString(),
         overridden.stdout.strip());
     assertTrue(overridden.stderr.contains("-O3"));
+    assertTrue(overridden.stderr.contains(Platform.current().executable("javac")));
     assertTrue(overridden.stderr.contains("--pgo=" + profile));
     assertFalse(overridden.stderr.contains("-H:LayerUse"));
   }

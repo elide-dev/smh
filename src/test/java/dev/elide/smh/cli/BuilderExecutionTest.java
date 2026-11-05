@@ -79,7 +79,7 @@ class BuilderExecutionTest {
         new AotBuilder(
             (command, cwd) -> {
               executed.add(List.copyOf(command));
-              if (command.getFirst().equals("elide")) compileMarker(c);
+              if (command.contains("--release")) compileMarker(c);
               else if (command.stream().anyMatch(a -> a.startsWith("-H:LayerCreate=")))
                 archive(command, cwd, true);
               else Files.writeString(Path.of(option(command, "-o")), "native-executable marker");
@@ -123,7 +123,7 @@ class BuilderExecutionTest {
     AotBuilder builder =
         new AotBuilder(
             (command, cwd) -> {
-              if (command.getFirst().equals("elide")) compileMarker(c);
+              if (command.contains("--release")) compileMarker(c);
               else throw failed;
             });
     assertSame(failed, assertThrows(IOException.class, () -> builder.build(c, false)));
@@ -135,7 +135,7 @@ class BuilderExecutionTest {
     AotBuilder missingLibrary =
         new AotBuilder(
             (command, cwd) -> {
-              if (command.getFirst().equals("elide")) compileMarker(c);
+              if (command.contains("--release")) compileMarker(c);
               else if (command.stream().anyMatch(a -> a.startsWith("-H:LayerCreate=")))
                 archive(command, cwd, false);
               else Files.writeString(Path.of(option(command, "-o")), "native-executable marker");
@@ -150,7 +150,7 @@ class BuilderExecutionTest {
                 () ->
                     new AotBuilder(
                             (command, cwd) -> {
-                              if (command.getFirst().equals("elide")) compileMarker(c);
+                              if (command.contains("--release")) compileMarker(c);
                             })
                         .build(c, false))
             .getMessage()

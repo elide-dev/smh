@@ -236,3 +236,13 @@ fn invalid_utf8_configuration_is_rejected_without_panicking() {
     use std::os::unix::ffi::OsStringExt;
     assert!(arguments(&["library".into(), OsString::from_vec(vec![0xff])]).is_err());
 }
+
+#[cfg(windows)]
+#[test]
+fn invalid_utf16_configuration_is_rejected_without_panicking() {
+    use std::os::windows::ffi::OsStringExt;
+    for units in [vec![0xd800], vec![0xdc00], vec![0xd800, 0x0061]] {
+        let error = arguments(&["library".into(), OsString::from_wide(&units)]).unwrap_err();
+        assert_eq!(error.to_string(), "Run configuration path must be UTF-8");
+    }
+}

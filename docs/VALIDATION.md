@@ -130,6 +130,10 @@ Retained JSON is compared with the run's configured output, including all raw
 observations. Redirected output, automatic plain-mode policy, and SIGINT cursor
 restoration are checked separately. Replayable asciinema v2 recordings, including
 their actual terminal sizes, are written under `build/terminal-tests/`.
+The same native check exercises missing dependencies/configurations, malformed
+JSON, missing required options, and real compiler failures. It verifies stable
+JSON error records, recovery advice, retained diagnostic/compiler logs, explicit
+verbose replay, clean result stdout, terminal color, and `NO_COLOR`.
 
 JVM tests separately cover histogram counts and boundary values, run-order grouping,
 rounded presentation without changing raw values, width adaptation, comparison

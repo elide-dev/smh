@@ -281,3 +281,56 @@ therefore preserve the native cache key. See its [guide](../examples/invoice-app
 
 See [Experiment modes](EXPERIMENTS.md) for fresh-process startup boundaries,
 full-budget soak, and the different wall-time and simulated-work axes.
+
+## Errors and recovery
+
+SMH reports CLI failures on stderr with a short explanation, a stable code, and
+next steps. Full exception traces are saved under `build/smh-errors/` relative to
+the current directory; the error prints the exact diagnostic path. Ordinary
+argument mistakes show focused help advice instead of a stack trace or a full
+usage dump. Compiler failures retain their full output in compiler logs; use
+`--verbose` to replay it before the error summary. Exit codes remain 2 for command syntax and 1 for command exceptions;
+delegated benchmark processes retain their own exit codes.
+
+For example, a missing invoice application JAR reports `SMH-CLASSPATH-MISSING`
+and explains that the application must be packaged first. From
+`examples/invoice-app`, run:
+
+```sh
+elide run assemble
+smh build --config smh-build.json
+```
+
+Changing benchmark sources does not build the application JAR. Check `classpath`
+in the build configuration if the application was packaged elsewhere; those
+paths are relative to the configuration file.
+
+Agents can select a single-line JSON error record with the inherited option:
+
+```sh
+smh --error-format json build --config smh-build.json
+# Also accepted after the subcommand:
+smh build --error-format json --config smh-build.json
+```
+
+The record has `schemaVersion: 1`, `type: "error"`, `code`, `command`, `exitCode`,
+`message`, `detail`, `advice` (an array), `diagnostics`, and `diagnosticsError`.
+`diagnostics` is a path or null; `diagnosticsError` explains a failed attempt to
+save the trace. Command syntax errors do not create trace files. Agents should
+identify the `type: "error"` record on stderr: existing command diagnostics can
+precede it. Successful stdout and delegated-process output are unchanged.
+
+| Code | Recovery |
+| --- | --- |
+| `SMH-USAGE` | Correct arguments using the command's `--help`. |
+| `SMH-CLASSPATH-MISSING` | Build the application dependency or correct its configured path. |
+| `SMH-FILE-MISSING` | Check the selected file and working directory. |
+| `SMH-OUTPUT-EXISTS` | Choose a new output directory; retain existing observations. |
+| `SMH-PERMISSION` | Check access to the named path. |
+| `SMH-TOOL-UNAVAILABLE` | Check the tool's installation, executable permissions, and configured path. |
+| `SMH-STARTUP-TIMEOUT` | Inspect launch logs, fix blocked work, or increase `--timeout`. |
+| `SMH-CONFIG-JSON` | Correct JSON syntax or value types. |
+| `SMH-CONFIG` | Correct the setting named in the message. |
+| `SMH-BUILD-FAILED` | Open the compiler log and fix its first error; use `--verbose` to replay diagnostics. |
+| `SMH-IO` | Inspect diagnostic/build/launch logs and fix the underlying I/O or tool failure. |
+| `SMH-INTERNAL` | Retain the diagnostic file and report a minimal reproduction with the SMH version. |

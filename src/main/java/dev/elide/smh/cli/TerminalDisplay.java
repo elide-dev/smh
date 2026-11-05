@@ -338,12 +338,12 @@ final class TerminalDisplay {
       if (animate) err.print("\r\033[2K");
       err.printf(
           Locale.ROOT,
-          "%s · %s · %.2f s · log: %s%n",
+          "  %s · %s · %.2f s · log: %s%n",
           title,
           status == 0 ? "complete" : "failed",
           (System.nanoTime() - start) / 1e9,
           path(log));
-      if (verbose || status != 0) Files.copy(log, err);
+      if (verbose) Files.copy(log, err);
       return status;
     } finally {
       terminate(child);

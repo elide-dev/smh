@@ -18,7 +18,8 @@ export PATH="$PWD/build:$PATH"
 cd examples/invoice-app
 ```
 
-Build and run the application:
+If SMH reports `SMH-CLASSPATH-MISSING`, the application JAR has not been assembled
+or its configured path is wrong. Build and run the application:
 
 ```sh
 elide run assemble

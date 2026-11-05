@@ -441,8 +441,8 @@ JVM tests exercise independent clock traces, persistent trial state, logical
 operation normalization, partial final windows, lifecycle failures, duplicate or
 missing readiness notifications, timeouts, malformed simulator dumps, comparison
 identity, and charts from 40 to 160 columns. The final JVM suite passes all
-153 tests with no skips: production line coverage is 3,764/3,778 (99.63%), branch
-coverage is 2,288/2,310 (99.05%), and mathematical-kernel line and branch coverage
+157 tests with no skips: production line coverage is 3,866/3,880 (99.64%), branch
+coverage is 2,330/2,352 (99.06%), and mathematical-kernel line and branch coverage
 are 100%. Final coverage and native validation receipts are retained under `build/experiment-validation/run-20261105/`; individual
 runs, commands, artifact hashes, raw counters, and failure controls are under
 `build/experiment-tests/`. The receipt distinguishes final checks from earlier
@@ -489,3 +489,11 @@ qualification fields. Its JVM tests exercise temporary startup progress before
 report rendering, build-log routing, narrow layouts, preserved histogram tails,
 and isolated timeline spikes at four plot rows. `build/clean-ui-validation/`
 retains the native invoice-app terminal captures and current validation receipt.
+
+CLI failure reporting is tested through the real Micronaut/Picocli entry point
+and the native CLI. Error records retain nonzero exit status, original details,
+and recovery advice; full cause chains remain in diagnostic files. Tests cover
+failed log writes without masking the original failure, terminal control-character
+sanitization, plain/colored output, and native compiler-log retention with explicit
+verbose replay. Local evidence is under `build/error-validation/` and
+`build/terminal-tests/`; no hosted CI pass is implied.

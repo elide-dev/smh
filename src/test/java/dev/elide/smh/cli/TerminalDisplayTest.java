@@ -355,7 +355,7 @@ class TerminalDisplayTest {
   }
 
   @Test
-  void buildDiagnosticsAreRetainedAndFailuresOrVerboseRunsReplayThem() throws Exception {
+  void buildDiagnosticsAreRetainedAndOnlyVerboseRunsReplayThem() throws Exception {
     var animated = new ByteArrayOutputStream();
     assertEquals(
         0,
@@ -381,7 +381,16 @@ class TerminalDisplayTest {
                   "compile",
                   directory,
                   verbose));
-          assertEquals(verbose || status != 0, err.toString().contains("compiler diagnostic"));
+          assertEquals(verbose, err.toString().contains("compiler diagnostic"));
+          Path saved =
+              Path.of(
+                  err.toString()
+                      .lines()
+                      .filter(line -> line.contains("log: "))
+                      .findFirst()
+                      .orElseThrow()
+                      .split("log: ", 2)[1]);
+          assertTrue(Files.readString(saved).contains("compiler diagnostic"));
           assertTrue(err.toString().contains("log:"));
         }
       }

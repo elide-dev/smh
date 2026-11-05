@@ -4,7 +4,7 @@ package dev.elide.smh.cli;
 
 import io.jstach.rainbowgum.LogOutput;
 import io.jstach.rainbowgum.RainbowGum;
-import io.micronaut.configuration.picocli.PicocliRunner;
+import io.micronaut.configuration.picocli.MicronautFactory;
 import jakarta.inject.*;
 import java.nio.file.*;
 import java.util.concurrent.Callable;
@@ -31,7 +31,14 @@ public class Main implements Runnable {
 
   static int execute(String[] args) {
     RainbowGum.set(Main::logging);
-    return PicocliRunner.execute(Main.class, args);
+    try (var factory = new MicronautFactory()) {
+      var command = new picocli.CommandLine(Main.class, factory);
+      command.setExecutionExceptionHandler(
+          (error, selected, parsed) -> CliErrors.handle(error, selected, false));
+      command.setParameterExceptionHandler(
+          (error, arguments) -> CliErrors.handle(error, error.getCommandLine(), true));
+      return command.execute(args);
+    }
   }
 
   static RainbowGum logging() {
@@ -43,6 +50,12 @@ public class Main implements Runnable {
                     .appender("stderr", appender -> appender.output(LogOutput.ofStandardErr())))
         .build();
   }
+
+  @Option(
+      names = "--error-format",
+      scope = ScopeType.INHERIT,
+      description = "Error output on stderr: ${COMPLETION-CANDIDATES} (default: text)")
+  CliErrors.Format errorFormat = CliErrors.Format.text;
 
   @Spec picocli.CommandLine.Model.CommandSpec spec;
 

@@ -72,6 +72,31 @@ class CliTest {
   }
 
   @Test
+  void errorsAreConciseAndJsonIsAvailableBeforeOrAfterTheSubcommand() throws Exception {
+    Path missing = directory.resolve("missing.json");
+    Output human = invoke("build", "--config", missing.toString());
+    assertEquals(1, human.status);
+    assertEquals("", human.stdout);
+    assertTrue(human.stderr.contains("SMH-FILE-MISSING"), human.stderr);
+    assertFalse(human.stderr.contains("at dev.elide"), human.stderr);
+    for (String[] args :
+        new String[][] {
+          {"--error-format", "json", "build", "--config", missing.toString()},
+          {"build", "--error-format", "json", "--config", missing.toString()},
+          {"--error-format", "json", "build"}
+        }) {
+      Output machine = invoke(args);
+      var error = com.google.gson.JsonParser.parseString(machine.stderr).getAsJsonObject();
+      assertEquals(machine.status, error.get("exitCode").getAsInt());
+      assertEquals("", machine.stdout);
+      assertFalse(error.getAsJsonArray("advice").isEmpty());
+    }
+    Output invalid = invoke("--error-format", "invalid", "build");
+    assertEquals(2, invalid.status);
+    assertTrue(invalid.stderr.contains("SMH-USAGE"));
+  }
+
+  @Test
   void buildOptionsOverrideJsonThroughThePublicParser() throws Exception {
     Path home = Files.createDirectories(directory.resolve("distribution"));
     Files.writeString(home.resolve("smh.jar"), "processor marker");

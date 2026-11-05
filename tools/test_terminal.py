@@ -35,11 +35,15 @@ def terminal(command, destination, *, interrupt=False, width=100, height=35, env
         stdout=slave,
         stderr=slave,
         env={
-            **os.environ,
-            "TERM": "xterm-256color",
-            "COLUMNS": str(width),
-            "LINES": str(height),
-            **(environment or {}),
+            key: value
+            for key, value in {
+                **os.environ,
+                "TERM": "xterm-256color",
+                "COLUMNS": str(width),
+                "LINES": str(height),
+                **(environment or {}),
+            }.items()
+            if value is not None
         },
         start_new_session=True,
     )
@@ -117,6 +121,101 @@ def histogram(screen, width):
     require("\x1b[?25h" in screen, "Completed results must restore the cursor")
 
 
+def error_cases(cli, output):
+    """The packaged CLI must expose readable failures and stable machine records."""
+    source = output / "ErrorWork.java"
+    source.write_text("class ErrorWork {}")
+    build = output / "missing-dependency.json"
+    build.write_text(
+        json.dumps(
+            {
+                "home": str(ROOT / "build"),
+                "sources": [str(source.resolve())],
+                "classpath": [str((output / "missing-app.jar").resolve())],
+            }
+        )
+    )
+    broken_source = output / "Broken.java"
+    broken_source.write_text("class Broken { BROKEN_FOR_ERROR_TEST }")
+    broken_build = output / "compiler-failure.json"
+    broken_build.write_text(
+        json.dumps(
+            {
+                "home": str(ROOT / "build"),
+                "sources": [str(broken_source.resolve())],
+                "output": str((output / "failed-build").resolve()),
+                "layers": False,
+            }
+        )
+    )
+    malformed = output / "malformed.json"
+    malformed.write_text("{")
+    missing = output / "absent-config.json"
+    cases = [
+        (["build", "--config", str(build)], "SMH-CLASSPATH-MISSING", 1),
+        (["build", "--config", str(missing)], "SMH-FILE-MISSING", 1),
+        (["build", "--config", str(malformed)], "SMH-CONFIG-JSON", 1),
+        (["build"], "SMH-USAGE", 2),
+        (["build", "--config", str(broken_build)], "SMH-BUILD-FAILED", 1),
+    ]
+    for arguments, code, status in cases:
+        for machine in (False, True):
+            command = [str(cli), *(["--error-format", "json"] if machine else []), *arguments]
+            result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=30)
+            require(result.returncode == status, result.stderr)
+            require(not result.stdout, "Failures must not contaminate result stdout")
+            require("\x1b" not in result.stderr, "Piped errors must be plain")
+            (output / f"{code}-{'json' if machine else 'text'}.log").write_text(result.stderr)
+            if machine:
+                records = [
+                    json.loads(line) for line in result.stderr.splitlines() if line.startswith("{")
+                ]
+                require(len(records) == 1, result.stderr)
+                error = records[0]
+                require(error["code"] == code and error["exitCode"] == status, error)
+                require(error["advice"], "Recovery advice missing")
+                if error["diagnostics"]:
+                    require(Path(error["diagnostics"]).is_file(), "Trace file missing")
+            else:
+                require(code in result.stderr and "Next steps" in result.stderr, result.stderr)
+                require(
+                    "\tat " not in result.stderr and "at dev.elide" not in result.stderr,
+                    result.stderr,
+                )
+            if code == "SMH-BUILD-FAILED":
+                require(
+                    "BROKEN_FOR_ERROR_TEST" not in result.stderr,
+                    "Compiler output leaked into the summary",
+                )
+                log = next(
+                    line.split("log: ", 1)[1]
+                    for line in result.stderr.splitlines()
+                    if "log: " in line
+                )
+                require(
+                    "BROKEN_FOR_ERROR_TEST" in Path(log).read_text(), "Compiler diagnostics lost"
+                )
+    verbose = subprocess.run(
+        [str(cli), "build", "--config", str(broken_build), "--verbose"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    require(verbose.returncode == 1 and "BROKEN_FOR_ERROR_TEST" in verbose.stderr, verbose.stderr)
+    status, screen = terminal(
+        [str(cli), *cases[0][0]],
+        output / "error-color.cast",
+        environment={"NO_COLOR": None, "CI": None},
+    )
+    require(status == 1 and "Next steps" in screen, screen)
+    require("\033[38;2;" in screen and "at dev.elide" not in screen, screen)
+    status, screen = terminal(
+        [str(cli), *cases[0][0]], output / "error-no-color.cast", environment={"NO_COLOR": "1"}
+    )
+    require(status == 1 and "\033" not in screen, screen)
+
+
 def main():
     require(sys.platform != "win32", "Real PTY check requires a POSIX host")
     cli = ROOT / "build/smh"
@@ -126,6 +225,7 @@ def main():
     )
     output = ROOT / "build/terminal-tests"
     output.mkdir(parents=True, exist_ok=True)
+    error_cases(cli, output)
     config = output / "run.json"
     configured_output = output / "configured-output.json"
     config.write_text(

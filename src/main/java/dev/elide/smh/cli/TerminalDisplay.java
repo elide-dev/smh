@@ -181,10 +181,13 @@ final class TerminalDisplay {
       if (out == null) err.println("  Raw report: " + path(stdout));
       return status;
     } finally {
+      if (!complete) err.println("  Failed-run files: " + path(stdout) + " · " + path(stderr));
       restore(child, err);
       if (shutdown != null) Runtime.getRuntime().removeShutdownHook(shutdown);
-      if (out != null) Files.deleteIfExists(stdout);
-      Files.deleteIfExists(stderr);
+      if (complete) {
+        if (out != null) Files.deleteIfExists(stdout);
+        Files.deleteIfExists(stderr);
+      }
       finishStream(stream, complete, err);
     }
   }

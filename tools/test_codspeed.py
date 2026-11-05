@@ -51,6 +51,13 @@ def simulation_instructions(profile, binary):
     return counts[0]
 
 
+def simulation_manifest(log):
+    """Keep the full runner log, but require exactly one SMH JSON array within it."""
+    candidates = [line for line in log.splitlines() if line.lstrip().startswith("[")]
+    require(len(candidates) == 1, "Expected exactly one SMH manifest in CodSpeed output")
+    return json.loads(candidates[0])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--codspeed", default="codspeed")
@@ -96,7 +103,7 @@ def main():
             require(benchmarks[0]["stats"]["mean_ns"] > 0)
         else:
             simulation_instructions(profile, binary)
-            manifest = json.loads((output / "simulation.log").read_text())
+            manifest = simulation_manifest((output / "simulation.log").read_text())
             require(len(manifest) == 1)
             require(manifest[0]["benchmark"] == "example.invoice.InvoiceBenchmark.total")
             require(manifest[0]["invocationsPerIteration"] == 100)

@@ -287,6 +287,23 @@ lines (99.92%), 1456/1463 branches (99.52%), and the mathematical kernel remains
 WARNING/ERROR routes. Hosted results remain tracked on PR #10; local test results
 are not a substitute for that platform matrix.
 
+Windows portable workers also exposed a sharing violation when deleting redirected
+files immediately after interruption. Failed/interrupted terminal runs now retain
+both raw output and diagnostics, report their paths, terminate the child, and restore
+the cursor. Tests require the original interruption and retained files. Successful
+redirected runs still remove temporary output after copying it.
+
+CodSpeed 5.6.3 adds a banner and GitHub log-group markers to stdout in hosted CI.
+The integration evidence reader now requires one JSON manifest inside that log,
+rejects missing/duplicate/malformed manifests, and retains the complete original log.
+The retained hosted sample validates at 4,136,855 whole-process simulated instructions;
+this is not a per-operation score. The revised local checks pass 116 JVM tests,
+29 tooling tests, lint, and real CodSpeed simulation plus three walltime rounds using
+the existing native invoice fixture. CodSpeed artifacts are retained under
+`build/codspeed-tests/20261105T160344324394Z/`. Final local production coverage is
+2468/2470 lines (99.92%) and 1460/1467 branches (99.52%); the math kernel remains 100%.
+Hosted validation must still pass for the amended candidate.
+
 ## Repository and release integrity
 
 The public repository has secret scanning/push protection, required checks,

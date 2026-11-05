@@ -6,10 +6,26 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.test_codspeed import simulation_instructions
+from tools.test_codspeed import simulation_instructions, simulation_manifest
 
 
 class CodSpeedEvidenceTest(unittest.TestCase):
+    def test_manifest_is_unique_and_survives_ci_runner_banners(self):
+        manifest = '[{"benchmark":"invoice","status":"pending-counter-import"}]'
+        expected = [{"benchmark": "invoice", "status": "pending-counter-import"}]
+        self.assertEqual(expected, simulation_manifest(manifest))
+        self.assertEqual(
+            expected,
+            simulation_manifest(
+                "CodSpeed runner v5.6.3\n::group::Running the benchmarks\n"
+                + manifest
+                + "\n::endgroup::\n"
+            ),
+        )
+        for invalid in ("", "banner only", manifest + "\n" + manifest, "[malformed]"):
+            with self.subTest(log=invalid), self.assertRaises((AssertionError, ValueError)):
+                simulation_manifest(invalid)
+
     def test_only_the_named_native_process_with_positive_counters_can_pass(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

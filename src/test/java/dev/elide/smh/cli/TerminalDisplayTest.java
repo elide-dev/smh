@@ -212,6 +212,7 @@ class TerminalDisplayTest {
       assertTrue(stderr.toString().contains("diagnostic"));
       assertTrue(stderr.toString().contains(status == 0 ? "Complete" : "Failed (exit 7)"));
       assertTrue(stderr.toString().endsWith("\033[0m\033[?25h"));
+      if (status != 0) assertRetainedOutput(stderr.toString());
     }
     var stderr = new ByteArrayOutputStream();
     assertThrows(
@@ -284,6 +285,19 @@ class TerminalDisplayTest {
     }
   }
 
+  private void assertRetainedOutput(String diagnostics) {
+    String retained =
+        diagnostics
+            .lines()
+            .filter(line -> line.contains("Failed-run files:"))
+            .findFirst()
+            .orElseThrow();
+    for (String file :
+        retained.substring(retained.indexOf("Failed-run files:") + 17).trim().split(" · "))
+      assertTrue(
+          Files.isRegularFile(Path.of(file)), "Failed output must remain available: " + file);
+  }
+
   @Test
   void interruptionTerminatesTheChildAndRestoresCursor() throws Exception {
     var stderr = new ByteArrayOutputStream();
@@ -299,6 +313,7 @@ class TerminalDisplayTest {
                   new PrintStream(new ByteArrayOutputStream()),
                   new PrintStream(stderr)));
       assertTrue(stderr.toString().endsWith("\033[0m\033[?25h"));
+      assertRetainedOutput(stderr.toString());
     } finally {
       Thread.interrupted();
     }

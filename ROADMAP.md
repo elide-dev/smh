@@ -28,15 +28,16 @@ an accurate measurement or evidence of JIT quiescence.
 - [x] F00-07: Measure the coverage baseline for every production Java package, including processors.
   Evidence: `tools/coverage_gate.py`, `build/reports/coverage-summary.json`; current deficit in assurance ledger.
 - [x] F00-08: Enforce >=99% production Java line and >=99% branch coverage; 100% for the mathematical kernel.
-  Evidence: actual local JaCoCo report, full gate passes at 99.47%/99.38%; kernel 100%/100%.
+  Evidence: actual local JaCoCo report, full gate passes; current snapshot and host scope in `docs/ASSURANCE.md`.
 - [x] F00-09: Collect Rust line/region/branch coverage separately; do not average away gaps.
   Evidence: stable line gate 144/145 (99.31%) including build.rs; isolated nightly 30/30
   instrumented branch outcomes. Compiler-defined coverage limits and profiles in assurance ledger.
 - [x] F00-10: Enforce formatting, Clippy warnings, workflow linting, license checks, and typed configuration.
   Evidence: `mise run lint`, configuration tests; Java/Python/Rust formatter versions pinned.
 - [x] F00-11: Add hardened, SHA-pinned CI using setup-elide and elide-dev/toolchain where supported.
-  Evidence: actionlint-validated workflows. Hosted execution remains pending, not claimed here.
-- [ ] F00-12: Report coverage and JUnit XML to Codecov using OIDC, with archived local evidence.
+  Evidence: hosted quality/security/portable workflows pass; see `docs/ASSURANCE.md`.
+- [x] F00-12: Report coverage and JUnit XML to Codecov using OIDC, with archived local evidence.
+  Evidence: hosted Java/Rust coverage and test uploads pass in the quality workflow.
 - [ ] F00-13: Pin/update dependencies and action references; record reproducible toolchain identities.
 - [x] F00-14: Maintain an assurance case and a platform qualification ledger.
   Evidence: `docs/ASSURANCE.md`; unqualified cells remain explicitly open.
@@ -206,7 +207,7 @@ architecture or running under emulation does not qualify native timing.
 - [ ] F06-10: Verify sanitizer installations with known-bug negative controls before accepting a clean run.
   Rust ASan/LSan now require heap-buffer-overflow, use-after-free, and leak detection
   through dynamically loaded FFI providers before running eleven instrumented tests. Compiler identity, hashes, logs and JUnit
-  are retained; Linux amd64 passed locally, arm64 CI is configured but unexecuted.
+  are retained; Linux amd64/arm64 hosted checks pass.
   Other instrumentors remain open; see SANITIZERS.md.
 - [ ] F06-11: Keep native helper, JNI/FFI, Rust, SVM-managed heap, and JIT-generated code coverage claims separate.
 - [ ] F06-12: Run mutation tests to show tests reject damaged timing, units, sink, and border logic.
@@ -229,7 +230,8 @@ architecture or running under emulation does not qualify native timing.
 ## M8 — security, releases, and OpenSSF
 
 - [ ] F08-01: Document security reporting, threat model, supported versions, governance, reviews, and contribution rules.
-- [ ] F08-02: Add Scorecard, dependency review, CodeQL/static analysis, dependency updates, and secret scanning.
+- [x] F08-02: Add Scorecard, dependency review, CodeQL/static analysis, dependency updates, and secret scanning.
+  Evidence: hosted runs and repository settings in `docs/ASSURANCE.md`.
 - [ ] F08-03: Use least-privilege permissions, pinned actions, protected CI trust boundaries, and harden-runner.
 - [ ] F08-04: Produce reproducible archives, checksums, SBOMs, signed provenance, and verified release artifacts.
 - [ ] F08-05: Enforce two-person review/branch protection and verify organization 2FA/access policies (hosting evidence).

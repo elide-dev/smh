@@ -4,7 +4,7 @@
 # Coverage-guided fuzzing
 
 Run `mise run fuzz-callgrind` for 10,000 inputs, or
-`python tools/fuzz_callgrind.py --runs 100000 --seed 534948`.
+`python3 tools/fuzz_callgrind.py --runs 100000 --seed 534948`.
 The tool assembles the Elide project, freezes its JAR, compiles the fuzz targets,
 and verifies SHA-256-pinned Jazzer artifacts from Maven Central. Jazzer is a
 test tool, not a runtime dependency of SMH.
@@ -32,7 +32,8 @@ and duplicate cache descriptors.
 The hardened Linux amd64/arm64 workflow runs 10,000 inputs for changes and
 1,000,000 inputs on its weekly schedule. It archives evidence even on failure.
 JUnit reports represent the campaign as one test, not one test per generated
-input. Hosted execution remains to be verified.
+input. [Hosted campaigns](https://github.com/elide-dev/smh/actions/runs/41940035267)
+pass on both architectures.
 
 Retain a real finding's saved input and reproducer, minimize it using Jazzer's
 libFuzzer crash-minimization flags, fix the defect, and add the minimized input
@@ -49,7 +50,7 @@ instrumentation, corpus, and reproduction interfaces.
 ## Run configurations
 
 `mise run fuzz-run-config` selects the second target. For longer campaigns use
-`python tools/fuzz_callgrind.py --target run-config --runs 100000`.
+`python3 tools/fuzz_callgrind.py --target run-config --runs 100000`.
 It exercises the filesystem-free `RunConfig.fromJson` API and uses independent
 valid-input construction to check exact nanosecond durations, simulation work
 budgets, batch sizes, and parameter strings. Only JSON syntax, schema/validation,

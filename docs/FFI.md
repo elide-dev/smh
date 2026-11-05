@@ -55,9 +55,11 @@ No ThinLTO contracts are applied to objects by this integration.
 
 Local Linux amd64 evidence includes a real O2 layered shared image invoked by the
 Rust bootstrap, with all example cases completed after the fingerprint check.
-Ten Rust tests independently cover symbol lookup failures before creation,
+Eleven Rust tests independently cover symbol lookup failures before creation,
 fingerprint mismatch before entry, creation/null-handle failures, combined
 entry/teardown failures, argument validation, and full-width fingerprint handling.
 The controllable Rust test library is a failure-injection fixture, not SVM.
-Native execution on other hosts, sanitizer/fuzzing evidence, simulator region
-functions, and additional thread attachment remain separate roadmap items.
+Hosted Rust lifecycle tests pass on Linux amd64/arm64, macOS arm64, and Windows
+amd64. Linux ASan/LSan and Miri evidence is described in [SANITIZERS.md](SANITIZERS.md).
+Real SVM execution on other hosts, FFI fuzzing, simulator region functions, and
+additional thread attachment remain separate roadmap items.

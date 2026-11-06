@@ -6,14 +6,19 @@ use std::{
     process::{Command, Output},
 };
 
+static DIRECTORIES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 struct Directory(PathBuf);
 impl Directory {
     fn new() -> Self {
+        // Tests run concurrently in one process; a clock alone collides on coarse timers.
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("smh-ffi-{}-{nonce}", std::process::id()));
+        let serial = DIRECTORIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("smh-ffi-{}-{serial}-{nonce}", std::process::id()));
         std::fs::create_dir(&path).unwrap();
         Self(path)
     }

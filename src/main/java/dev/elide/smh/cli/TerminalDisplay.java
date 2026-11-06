@@ -257,8 +257,9 @@ final class TerminalDisplay {
                     return descendant.onExit();
                   })
               .toArray(java.util.concurrent.CompletableFuture[]::new);
+      // Windows reports forcibly destroyed descendants as alive for a moment; wait generously.
       java.util.concurrent.CompletableFuture.allOf(exits)
-          .completeOnTimeout(null, 1, TimeUnit.SECONDS)
+          .completeOnTimeout(null, 10, TimeUnit.SECONDS)
           .join();
       child.destroyForcibly().onExit().join();
     }

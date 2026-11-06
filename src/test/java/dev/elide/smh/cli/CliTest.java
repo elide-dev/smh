@@ -17,6 +17,29 @@ import picocli.CommandLine;
 class CliTest {
   @TempDir Path directory;
 
+  /**
+   * A real SDK layout built from the test classpath, so the test does not depend on a previously
+   * assembled build/ directory or on test ordering.
+   */
+  static Path distribution(Path directory) throws Exception {
+    Path home = Files.createDirectories(directory.resolve("distribution"));
+    Path lib = Files.createDirectories(home.resolve("lib"));
+    Path classes = null;
+    for (String entry : System.getProperty("java.class.path").split(File.pathSeparator)) {
+      Path path = Path.of(entry);
+      if (Files.isRegularFile(path.resolve("dev/elide/smh/cli/Main.class"))) classes = path;
+      else if (Files.isRegularFile(path)
+          && path.getFileName().toString().matches("(gson|jmh-core|nativeimage|word)-.*\\.jar"))
+        Files.copy(path, lib.resolve(path.getFileName()), StandardCopyOption.REPLACE_EXISTING);
+    }
+    assertNotNull(
+        classes,
+        "SMH classes must be on the test classpath: " + System.getProperty("java.class.path"));
+    JmhBuilder.jar(classes, home.resolve("smh.jar"));
+    JmhBuilder.jar(classes, home.resolve("smh-runtime.jar"));
+    return home;
+  }
+
   private static String java() {
     return Path.of(System.getProperty("java.home"), "bin", Platform.current().executable("java"))
         .toString();
@@ -448,7 +471,7 @@ class CliTest {
             "package example; public class Work { private int n;"
                 + " @org.openjdk.jmh.annotations.Benchmark public int work() { return ++n; } }");
     JsonObject build = new JsonObject();
-    build.addProperty("home", Path.of("build").toAbsolutePath().toString());
+    build.addProperty("home", distribution(directory).toString());
     build.addProperty("nativeImage", "unavailable-native-image");
     build.addProperty("javaHome", System.getProperty("java.home"));
     com.google.gson.JsonArray sources = new com.google.gson.JsonArray();

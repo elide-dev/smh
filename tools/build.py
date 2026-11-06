@@ -80,6 +80,19 @@ if __name__ == "__main__":
     build()
     if len(sys.argv) > 1 and sys.argv[1] == "crema":
         native_image = os.environ.get("SMH_NATIVE_IMAGE", "native-image")
+        # Crema/Ristretto needs a compiler that exposes runtime class loading and JIT options;
+        # released Oracle GraalVM 25.0.x builds do not. Fail before compiling, naming the toolchain.
+        options = subprocess.run(
+            [native_image, "--expert-options-all"], text=True, capture_output=True, check=False
+        ).stdout
+        if "GraalJITCompileAtRuntime" not in options or "RuntimeClassLoading" not in options:
+            version = subprocess.run(
+                [native_image, "--version"], text=True, capture_output=True, check=False
+            ).stdout.strip()
+            raise SystemExit(
+                "Crema host build requires a native-image with -H:+RuntimeClassLoading and"
+                " -H:+GraalJITCompileAtRuntime; this toolchain lacks them:\n" + version
+            )
         flags = [
             "--no-fallback",
             "-O2",

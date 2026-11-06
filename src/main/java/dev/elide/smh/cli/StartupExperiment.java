@@ -231,6 +231,21 @@ final class StartupExperiment {
       Launcher launcher)
       throws Exception {
     return run(
+        template, config, directory, valgrind, display, comparison, launcher, Platform.current());
+  }
+
+  /** Test seam: the host platform decides whether Callgrind orchestration is attempted. */
+  static JsonArray run(
+      ProcessBuilder template,
+      Path config,
+      Path directory,
+      String valgrind,
+      TerminalDisplay.Mode display,
+      BenchmarkComparison comparison,
+      Launcher launcher,
+      Platform platform)
+      throws Exception {
+    return run(
         template,
         config,
         directory,
@@ -238,7 +253,8 @@ final class StartupExperiment {
         display,
         comparison,
         launcher,
-        Optional.ofNullable(System.console()).map(Console::isTerminal).orElse(false));
+        Optional.ofNullable(System.console()).map(Console::isTerminal).orElse(false),
+        platform);
   }
 
   static JsonArray run(
@@ -250,6 +266,29 @@ final class StartupExperiment {
       BenchmarkComparison comparison,
       Launcher launcher,
       boolean terminal)
+      throws Exception {
+    return run(
+        template,
+        config,
+        directory,
+        valgrind,
+        display,
+        comparison,
+        launcher,
+        terminal,
+        Platform.current());
+  }
+
+  static JsonArray run(
+      ProcessBuilder template,
+      Path config,
+      Path directory,
+      String valgrind,
+      TerminalDisplay.Mode display,
+      BenchmarkComparison comparison,
+      Launcher launcher,
+      boolean terminal,
+      Platform platform)
       throws Exception {
     RunConfig settings = RunConfig.read(config.toString());
     JsonObject effective = JsonParser.parseString(Files.readString(config)).getAsJsonObject();
@@ -313,7 +352,8 @@ final class StartupExperiment {
           ProcessBuilder process = copy(template, config, run);
           process.environment().remove("SMH_STARTUP_DISCOVER");
           if (simulation)
-            process.command(simulationCommand(valgrind, process.command(), launchDirectory, exit));
+            process.command(
+                simulationCommand(valgrind, process.command(), launchDirectory, exit, platform));
           Launch launch =
               launcher.execute(
                   process, launchDirectory, timeout, UUID.randomUUID().toString(), exit);

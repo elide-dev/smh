@@ -296,19 +296,23 @@ class StartupExperimentTest {
                         : descriptions.toString(),
                 17);
           };
-      if (Platform.current().os() != Platform.OperatingSystem.LINUX && !scenario.equals("empty")) {
+      // Orchestration is exercised on every host through the injected launcher and platform;
+      // a non-Linux host is still rejected before any launch.
+      if (!scenario.equals("empty"))
         assertThrows(
             IllegalArgumentException.class,
             () ->
                 StartupExperiment.run(
                     process,
                     config,
-                    target,
+                    Files.createDirectory(directory.resolve("rejected-" + scenario)),
                     "valgrind",
                     TerminalDisplay.Mode.plain,
                     null,
-                    launcher));
-      } else if (List.of("normal", "exit").contains(scenario)) {
+                    launcher,
+                    Platform.parse("Windows", "amd64")));
+      Platform linux = Platform.parse("Linux", "amd64");
+      if (List.of("normal", "exit").contains(scenario)) {
         var screen = new ByteArrayOutputStream();
         PrintStream original = System.err;
         JsonArray rows;
@@ -325,7 +329,8 @@ class StartupExperimentTest {
                   (builder, path, timeout, token, finished) -> {
                     assertFalse(screen.toString().contains("Launch distribution"));
                     return launcher.execute(builder, path, timeout, token, finished);
-                  });
+                  },
+                  linux);
         } finally {
           System.setErr(original);
         }
@@ -343,7 +348,8 @@ class StartupExperimentTest {
               TerminalDisplay.Mode.tui,
               null,
               launcher,
-              true);
+              true,
+              linux);
         } finally {
           System.setErr(original);
         }
@@ -367,7 +373,8 @@ class StartupExperimentTest {
                     "valgrind",
                     TerminalDisplay.Mode.plain,
                     null,
-                    launcher));
+                    launcher,
+                    linux));
     }
     Path wall =
         Files.writeString(

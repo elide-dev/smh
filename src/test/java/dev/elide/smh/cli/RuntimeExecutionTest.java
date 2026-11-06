@@ -67,6 +67,10 @@ class RuntimeExecutionTest {
     c.runtimeArgs.add("-Xmx128m");
     ProcessBuilder jvm = RuntimeExecution.prepare(c, run);
     assertTrue(jvm.command().contains("-XX:-UseJVMCICompiler"));
+    assertTrue(
+        jvm.command().indexOf("-XX:+UnlockExperimentalVMOptions")
+            < jvm.command().indexOf("-XX:-UseJVMCICompiler"),
+        "plain OpenJDK builds only accept the JVMCI switch after unlocking experimental options");
     assertTrue(jvm.command().contains("-XX:-TieredCompilation"));
     assertFalse(jvm.command().get(jvm.command().indexOf("-cp") + 1).contains(classes.toString()));
     assertTrue(jvm.command().contains(classes.toString()));

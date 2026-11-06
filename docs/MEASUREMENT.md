@@ -30,7 +30,9 @@ Cross-harness deltas are descriptive: sink, inlining, lifecycle, and loop costs
 can differ. The aim is to test where AOT or Crema/Ristretto outperforms HotSpot,
 not to select settings or discard results to force that outcome.
 
-HotSpot `hotspot` uses tiered C1/C2; `hotspot-c2` disables tiered compilation.
+HotSpot `hotspot` uses tiered C1/C2; `hotspot-c2` disables tiered compilation. Both
+unlock experimental options and disable the JVMCI compiler so that GraalVM-based and
+plain OpenJDK 25 runtimes execute the same C1/C2 configuration.
 The optional JDK 25 Leyden cache stores classes, linking state, and method
 profiles. Training is separate and excluded from performance deltas. Measurement
 forks require the cache and cache-loading evidence; unsupported or degraded

@@ -122,10 +122,16 @@ final class RuntimeExecution {
       executableDigest = BuildCache.hash(executable);
       command.add(executable.toAbsolutePath().toString());
       command.addAll(c.runtimeArgs);
-      command.add("-XX:-UseJVMCICompiler");
-      if (c.execution.equals("hotspot-c2")) command.add("-XX:-TieredCompilation");
-      runtimeArgs.add("-XX:-UseJVMCICompiler");
-      if (c.execution.equals("hotspot-c2")) runtimeArgs.add("-XX:-TieredCompilation");
+      // UseJVMCICompiler is a product flag on GraalVM-based JDKs and an experimental one on
+      // plain OpenJDK builds; unlocking first lets both disable the JVMCI top tier.
+      for (String flag : List.of("-XX:+UnlockExperimentalVMOptions", "-XX:-UseJVMCICompiler")) {
+        command.add(flag);
+        runtimeArgs.add(flag);
+      }
+      if (c.execution.equals("hotspot-c2")) {
+        command.add("-XX:-TieredCompilation");
+        runtimeArgs.add("-XX:-TieredCompilation");
+      }
       identity.addProperty("compilerRequested", c.execution.equals("hotspot") ? "tiered-c2" : "c2");
       identity.addProperty(
           "toolchain", BuildCache.compilerIdentity(List.of(executable.toString())));

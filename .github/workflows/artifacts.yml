@@ -32,7 +32,7 @@ jobs:
       - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1
         with:
           distribution: graalvm
-          version: '25.0'
+          version: '25.5'
           github-token: ${{ github.token }}
       - name: Build native CLI and bootstrap
         run: python tools/build.py native

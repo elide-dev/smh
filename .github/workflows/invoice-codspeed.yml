@@ -31,7 +31,7 @@ jobs:
       - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1, 2026-11-04
         with:
           distribution: graalvm
-          version: '25.0'
+          version: '25.5'
           github-token: ${{ github.token }}
       - name: Install checksum-pinned CodSpeed CLI
         run: |

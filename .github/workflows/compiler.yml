@@ -30,7 +30,7 @@ jobs:
       - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1, 2026-11-04
         with:
           distribution: graalvm
-          version: '25.0'
+          version: '25.5'
           github-token: ${{ github.token }}
       - name: Install host simulator
         run: |
@@ -72,7 +72,7 @@ jobs:
       - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1, 2026-11-04
         with:
           distribution: graalvm
-          version: '25.0'
+          version: '25.5'
           github-token: ${{ github.token }}
           native-image-job-reports: 'false'
       # Probe the resolved 25.0 compiler; its actual version and implementation hashes

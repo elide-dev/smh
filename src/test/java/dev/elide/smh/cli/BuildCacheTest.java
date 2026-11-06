@@ -5,6 +5,7 @@ package dev.elide.smh.cli;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.google.gson.*;
+import dev.elide.smh.runtime.Platform;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
@@ -135,6 +136,28 @@ class BuildCacheTest {
     record.getAsJsonObject("files").addProperty("binary", BuildCache.hash(binary));
     Files.writeString(receipt, record.toString());
     assertEquals(binary, BuildCache.verified(receipt, root));
+  }
+
+  @Test
+  void executableFilesExcludeMissingPathsAndDirectoriesOnEveryPlatform() throws Exception {
+    assertFalse(BuildCache.executableFile(directory.resolve("missing")));
+    assertFalse(BuildCache.executableFile(directory));
+    Path tool = Files.writeString(directory.resolve("runnable"), "tool");
+    assertTrue(tool.toFile().setExecutable(true));
+    assertTrue(BuildCache.executableFile(tool));
+  }
+
+  @Test
+  void compilerIdentityReusesHashesAcrossToolsOfOneInstallation() throws Exception {
+    String java =
+        Path.of(System.getProperty("java.home"), "bin", Platform.current().executable("java"))
+            .toString();
+    Map<Path, String> hashes = new HashMap<>();
+    String first = BuildCache.compilerIdentity(List.of(java), hashes);
+    int hashed = hashes.size();
+    assertTrue(hashed > 0);
+    assertEquals(first, BuildCache.compilerIdentity(List.of(java), hashes));
+    assertEquals(hashed, hashes.size());
   }
 
   @Test

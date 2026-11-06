@@ -37,7 +37,7 @@ final class RuntimeExecution {
 
   /** An executable SMH did not build: identified by content, never by a cache receipt. */
   static BuildCache.Result external(Path binary) throws Exception {
-    if (!Files.isRegularFile(binary) || !Files.isExecutable(binary))
+    if (!BuildCache.executableFile(binary))
       throw new IllegalArgumentException("Benchmark binary is not an executable file: " + binary);
     Path absolute = binary.toAbsolutePath().normalize();
     return new BuildCache.Result(

@@ -409,6 +409,15 @@ final class BuildCache {
     }
   }
 
+  /**
+   * Whether {@code path} is a file this process may execute. Windows treats every file as
+   * executable, so excluding directories (rather than requiring a regular file first) keeps each
+   * outcome reachable on every platform.
+   */
+  static boolean executableFile(Path path) {
+    return Files.isExecutable(path) && !Files.isDirectory(path);
+  }
+
   static Path executable(String name) throws IOException {
     // The single-variable lookup honors Windows' case-insensitive environment names.
     return executable(name, Objects.requireNonNullElse(System.getenv("PATH"), ""));
@@ -419,8 +428,7 @@ final class BuildCache {
     if (direct.isAbsolute() || direct.getParent() != null) return direct.toAbsolutePath();
     for (String directory : searchPath.split(File.pathSeparator)) {
       Path candidate = Path.of(directory).resolve(name);
-      if (Files.isRegularFile(candidate) && Files.isExecutable(candidate))
-        return candidate.toAbsolutePath();
+      if (executableFile(candidate)) return candidate.toAbsolutePath();
     }
     throw new IOException("Build tool is not on PATH: " + name);
   }

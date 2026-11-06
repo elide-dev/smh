@@ -23,8 +23,7 @@ final class JavaCompiler {
     for (String entry : path.split(java.util.regex.Pattern.quote(File.pathSeparator))) {
       if (entry.isBlank()) continue;
       Path elide = Path.of(entry).resolve(platform.executable("elide")).toAbsolutePath();
-      if (Files.isRegularFile(elide) && Files.isExecutable(elide))
-        return List.of(elide.toString(), "javac", "--");
+      if (BuildCache.executableFile(elide)) return List.of(elide.toString(), "javac", "--");
     }
     String home = environment.getOrDefault("JAVA_HOME", "");
     if (home.isBlank()) home = runtimeHome;
@@ -37,7 +36,7 @@ final class JavaCompiler {
 
   private static List<String> jdk(Path home, Platform platform) {
     Path javac = home.toAbsolutePath().resolve("bin").resolve(platform.executable("javac"));
-    if (!Files.isRegularFile(javac) || !Files.isExecutable(javac))
+    if (!BuildCache.executableFile(javac))
       throw new IllegalArgumentException("Java home has no executable JDK compiler: " + javac);
     return List.of(javac.toString());
   }

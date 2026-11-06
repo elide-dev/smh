@@ -246,23 +246,26 @@ final class TerminalDisplay {
   }
 
   static void terminate(Process child) {
-    if (child != null && child.isAlive()) {
-      // Allow the parent JVM to reap terminated forks before terminating it as well.
-      var exits =
-          child
-              .descendants()
-              .map(
-                  descendant -> {
-                    descendant.destroyForcibly();
-                    return descendant.onExit();
-                  })
-              .toArray(java.util.concurrent.CompletableFuture[]::new);
-      // Windows reports forcibly destroyed descendants as alive for a moment; wait generously.
-      java.util.concurrent.CompletableFuture.allOf(exits)
-          .completeOnTimeout(null, 10, TimeUnit.SECONDS)
-          .join();
-      child.destroyForcibly().onExit().join();
+    if (child == null || !child.isAlive()) return;
+    // Snapshot the tree first: a destroyed parent can no longer enumerate its descendants.
+    List<ProcessHandle> tree = new ArrayList<>(child.descendants().toList());
+    tree.add(child.toHandle());
+    for (ProcessHandle process : tree) process.destroyForcibly();
+    // join() never throws on interruption, so cleanup also completes from interrupted threads.
+    java.util.concurrent.CompletableFuture.allOf(
+            tree.stream()
+                .map(ProcessHandle::onExit)
+                .toArray(java.util.concurrent.CompletableFuture[]::new))
+        .completeOnTimeout(null, 10, TimeUnit.SECONDS)
+        .join();
+    // Windows can report a terminated process as alive for a moment after its exit future
+    // completes; re-check and re-issue termination for anything that survived.
+    for (ProcessHandle process : tree) {
+      if (!process.isAlive()) continue;
+      process.destroyForcibly();
+      process.onExit().completeOnTimeout(null, 2, TimeUnit.SECONDS).join();
     }
+    child.onExit().completeOnTimeout(null, 2, TimeUnit.SECONDS).join();
   }
 
   static void restore(Process child, PrintStream err) {

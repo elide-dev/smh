@@ -33,10 +33,18 @@ final class BytecodeBuilder {
               false,
               settings -> compile(settings, false, commands),
               BuildCache::bytecodeFingerprint);
-      TerminalDisplay.buildMessages()
-          .println(
-              (result.hit() ? "Bytecode cache hit · " : "Bytecode built · ")
-                  + result.key().substring(0, 12));
+      String status =
+          (result.hit() ? "Bytecode cache hit · " : "Bytecode built · ")
+              + result.key().substring(0, 12);
+      PrintStream messages = TerminalDisplay.buildMessages();
+      messages.println(status);
+      // Like AOT builds, surface cache status on the terminal when build output is captured.
+      if (messages != System.err)
+        System.err.println(
+            "  "
+                + (result.hit() ? TerminalDisplay.GREEN : TerminalDisplay.GOLD)
+                + status
+                + TerminalDisplay.RESET);
       return new Artifact(
           result.binary().getParent().getParent().getParent().getParent().getParent(),
           result.key());

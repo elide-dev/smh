@@ -8,6 +8,7 @@ import com.google.gson.JsonObject;
 import dev.elide.smh.runtime.Platform;
 import java.io.*;
 import java.nio.file.*;
+import java.util.List;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -181,7 +182,7 @@ class CliTest {
     assertEquals(0, defaults.status, defaults.stderr);
     Output flags = invoke("build", "--config", file.toString(), "--print-flags", "-O3");
     assertEquals(0, flags.status, flags.stderr);
-    assertTrue(flags.stdout.startsWith("--no-fallback\n-O3\n"), flags.stdout);
+    assertEquals(List.of("--no-fallback", "-O3"), flags.stdout.lines().limit(2).toList());
     assertTrue(flags.stdout.contains("-DcompilerBlackholesEnabled=true"), flags.stdout);
     Output contract =
         invoke("build", "--config", file.toString(), "--print-flags", "json", "--no-layers");
@@ -358,7 +359,7 @@ class CliTest {
     Files.writeString(
         external,
         windows
-            ? "@echo off\r\necho external >> \"" + executions + "\"\r\necho []\r\n"
+            ? "@echo off\r\necho external>>\"" + executions + "\"\r\necho []\r\n"
             : "#!/bin/sh\necho external >> '" + executions + "'\necho '[]'\n");
     assertTrue(external.toFile().setExecutable(true));
     Main.Bench own = new Main.Bench();

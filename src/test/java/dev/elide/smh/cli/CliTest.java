@@ -85,7 +85,7 @@ class CliTest {
     assertEquals(0, invoke("--help").status);
     Output version = invoke("--version");
     assertEquals(0, version.status);
-    assertEquals("smh 0.2.0", version.stdout.strip()); // x-release-please-version
+    assertEquals("smh 0.3.0", version.stdout.strip()); // x-release-please-version
     assertEquals(0, invoke("build", "--help").status);
     assertEquals(0, invoke("simulate", "--help").status);
     assertEquals(2, invoke("simulate").status);

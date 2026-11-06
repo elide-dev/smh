@@ -269,14 +269,14 @@ final class TerminalDisplay {
       }
     }
     for (ProcessHandle process : tree) process.destroyForcibly();
-    // join() never throws on interruption, so cleanup also completes from interrupted threads.
-    java.util.concurrent.CompletableFuture.allOf(
-            tree.stream()
-                .map(ProcessHandle::onExit)
-                .toArray(java.util.concurrent.CompletableFuture[]::new))
-        .completeOnTimeout(null, 10, TimeUnit.SECONDS)
-        .join();
-    child.destroyForcibly().onExit().join();
+    child.destroyForcibly();
+    // Poll isAlive rather than trusting onExit: on Windows onExit can complete through a
+    // separately opened handle before the process reports itself terminated. parkNanos ignores
+    // interruption, so cleanup also completes from interrupted threads.
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < deadline
+        && (child.isAlive() || tree.stream().anyMatch(ProcessHandle::isAlive)))
+      java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(10));
   }
 
   static void restore(Process child, PrintStream err) {

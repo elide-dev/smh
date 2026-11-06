@@ -44,6 +44,27 @@ class BuildLogTest {
   }
 
   @Test
+  void persistentMoveFailuresAreRetriedThenRetainedAndMissingLogsAreNot() throws Exception {
+    Path staging = Files.writeString(directory.resolve("locked.log"), "locked diagnostics");
+    // A non-empty destination directory fails every move, standing in for a still-open writer.
+    Path occupied = Files.createDirectories(directory.resolve("occupied"));
+    Files.writeString(occupied.resolve("entry"), "entry");
+    var messages = new ByteArrayOutputStream();
+    long started = System.nanoTime();
+    assertEquals(staging, new BuildLog(staging, occupied, new PrintStream(messages)).publish());
+    assertTrue(System.nanoTime() - started >= 1_000_000_000L);
+    assertEquals("locked diagnostics", Files.readString(staging));
+    assertTrue(messages.toString().contains("could not write"));
+
+    Path missing = directory.resolve("missing.log");
+    started = System.nanoTime();
+    assertEquals(
+        missing,
+        new BuildLog(missing, directory.resolve("moved.log"), new PrintStream(messages)).publish());
+    assertTrue(System.nanoTime() - started < 1_000_000_000L);
+  }
+
+  @Test
   void scopedCleanupTerminatesChildBeforePublishingOutputAndCommand() throws Exception {
     Path source =
         Files.writeString(

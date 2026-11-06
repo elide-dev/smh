@@ -81,7 +81,8 @@ final class StartupExperiment {
         throw new IOException("Startup timed out; partial observations retained at " + directory);
       long completion = System.nanoTime() - start;
       Readout output = read.get(Math.max(1, timeout - completion), TimeUnit.NANOSECONDS);
-      if (child.exitValue() != 0) throw new IOException("Startup process failed; see " + directory);
+      if (child.exitValue() != 0)
+        throw failedLaunch(child.exitValue(), directory.resolve("stderr.log"));
       if (!exit && (output.signals != 1 || output.endpoint <= 0))
         throw new IOException(
             "Startup did not produce exactly one endpoint notification; see " + directory);
@@ -94,6 +95,24 @@ final class StartupExperiment {
       TerminalDisplay.terminate(child);
       if (shutdown != null) Runtime.getRuntime().removeShutdownHook(shutdown);
     }
+  }
+
+  static IOException failedLaunch(int status, Path stderr) {
+    String detail;
+    try (var input = Files.newInputStream(stderr)) {
+      detail =
+          new String(input.readNBytes(4096), java.nio.charset.StandardCharsets.UTF_8)
+              .lines()
+              .filter(line -> !line.isBlank())
+              .findFirst()
+              .map(line -> TerminalDisplay.clean(line.replaceAll("\033\\[[0-?]*[ -/]*[@-~]", "")))
+              .orElse("No diagnostic on stderr");
+      if (detail.length() > 240) detail = detail.substring(0, 240) + "…";
+    } catch (IOException error) {
+      detail = "Could not read launch diagnostics";
+    }
+    return new IOException(
+        "Startup process failed (exit " + status + "): " + detail + "; log: " + stderr);
   }
 
   private static void recordFailure(Path directory, Exception failure) throws IOException {

@@ -64,15 +64,26 @@ public class Main implements Callable<Integer> {
   @Option(
       names = "--candidate",
       parameterConsumer = StartupCandidates.Arguments.class,
-      description = "Command argv, ending at the next --candidate; put all SMH options first")
+      description = "Command argv, ending at --candidate or --prepare; put SMH options first")
   java.util.List<String> candidates = new java.util.ArrayList<>();
+
+  @Option(
+      names = "--prepare",
+      parameterConsumer = StartupCandidates.Arguments.class,
+      description =
+          "Build/prepare argv once before timing; repeat for multiple preparation commands")
+  java.util.List<String> preparations = new java.util.ArrayList<>();
 
   @Option(names = "--display", defaultValue = "auto")
   TerminalDisplay.Mode display = TerminalDisplay.Mode.auto;
 
   @Override
   public Integer call() throws Exception {
-    if (!candidates.isEmpty()) return StartupCandidates.run(candidates, experiment, display);
+    if (!candidates.isEmpty())
+      return StartupCandidates.run(candidates, experiment, display, preparations);
+    if (!preparations.isEmpty())
+      throw new IllegalArgumentException(
+          "--prepare requires --candidate commands; for smh bench use prepare in the build config");
     if (experiment.mode != null)
       throw new IllegalArgumentException(
           "Use --candidate commands or smh bench --mode " + experiment.mode);
@@ -198,9 +209,11 @@ public class Main implements Callable<Integer> {
       if (output != null) c.output = output.toAbsolutePath();
       if (noLayers) c.layers = false;
       if (shared) c.shared = true;
+      if (bytecodeOnly && baseOnly)
+        throw new IllegalArgumentException("Choose --bytecode-only or --base-only");
+      BuildPreparation.prepare(c, dryRun);
       if (bytecodeOnly) {
-        if (baseOnly) throw new IllegalArgumentException("Choose --bytecode-only or --base-only");
-        c.validate();
+        c.validate(!dryRun || c.prepare.isEmpty());
         System.out.println(
             TerminalDisplay.path(
                 BytecodeBuilder.build(
@@ -287,10 +300,9 @@ public class Main implements Callable<Integer> {
           || simulation
           || experiment.output != null) {
         report = experiment.directory();
-        Files.writeString(report.resolve("requested-run.json"), requested.toString());
         if (!simulation && !run.mode.equals("startup"))
           effective.addProperty("output", report.resolve("results.json").toString());
-        config = Files.writeString(report.resolve("run.json"), effective.toString());
+        config = report.resolve("run.json");
         System.err.println("  Files · " + TerminalDisplay.path(report));
       }
       BuildConfig c = BuildConfig.read(buildConfig, home);
@@ -318,8 +330,28 @@ public class Main implements Callable<Integer> {
               ? Files.createTempFile(c.output, "build-", ".log")
               : report.resolve("build.log");
       System.err.println("  Build log · " + TerminalDisplay.path(buildLog));
-      try (var log = new java.io.PrintStream(Files.newOutputStream(buildLog))) {
+      Path stagedBuildLog = Files.createTempFile("smh-build-", ".log");
+      BuildLog transcript = new BuildLog(stagedBuildLog, buildLog, System.err);
+      var log = new java.io.PrintStream(Files.newOutputStream(stagedBuildLog));
+      var scope = new TerminalDisplay.BuildScope();
+      TerminalDisplay.BUILD_SCOPE.set(scope);
+      Thread shutdown =
+          new Thread(
+              () -> {
+                scope.finishBuild();
+                log.close();
+                transcript.publish();
+              },
+              "smh-build-log-cleanup");
+      Runtime.getRuntime().addShutdownHook(shutdown);
+      try (log) {
         TerminalDisplay.BUILD_LOG.set(log);
+        BuildPreparation.prepare(c, false);
+        if (report != null) {
+          Files.createDirectories(report);
+          Files.writeString(report.resolve("requested-run.json"), requested.toString());
+          Files.writeString(config, effective.toString());
+        }
         if (!c.execution.equals("aot")) {
           if (rebuild)
             throw new IllegalArgumentException("--rebuild currently applies to AOT artifacts only");
@@ -334,8 +366,12 @@ public class Main implements Callable<Integer> {
           process = RuntimeExecution.aot(artifact, config);
         }
       } finally {
+        scope.finishBuild();
+        TerminalDisplay.BUILD_SCOPE.remove();
         TerminalDisplay.BUILD_LOG.remove();
-        if (verbose) Files.copy(buildLog, System.err);
+        Path retained = transcript.publish();
+        BuildLog.removeHook(shutdown);
+        if (verbose) Files.copy(retained, System.err);
       }
       if (run.mode.equals("startup")) {
         StartupExperiment.run(process, config, report, experiment.valgrind, display, comparison);
@@ -428,6 +464,7 @@ public class Main implements Callable<Integer> {
       c.execution = execution;
       c.verbose = verbose;
       if (runtimeJavaHome != null) c.runtimeJavaHome = runtimeJavaHome.toAbsolutePath();
+      BuildPreparation.prepare(c, false);
       return JmhExecution.run(c, run, forks, aotCache, output, display, baseline);
     }
   }

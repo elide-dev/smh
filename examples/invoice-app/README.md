@@ -5,8 +5,8 @@
 
 This is an independent Elide project. Its CLI totals invoices using integer cents
 and checked arithmetic. Elide packages the application into `build/invoice-app.jar`;
-SMH compiles a separate JMH-style benchmark against that JAR. Application sources
-are **not** recompiled by SMH.
+SMH invokes the configured `elide run assemble` preparation command to build the
+application, then compiles a separate JMH-style benchmark against that JAR.
 
 Use the repository's pinned Elide, GraalVM JDK 25 with `native-image`, and a host
 C compiler. The commands below run from a mise-activated shell. From the repository
@@ -18,8 +18,7 @@ export PATH="$PWD/build:$PATH"
 cd examples/invoice-app
 ```
 
-If SMH reports `SMH-CLASSPATH-MISSING`, the application JAR has not been assembled
-or its configured path is wrong. Build and run the application:
+To run the application by itself, assemble it first:
 
 ```sh
 elide run assemble
@@ -31,15 +30,19 @@ Build the application and benchmark, then run both input sizes in one step:
 
 ```sh
 elide run bench
-# Or, after assembling the application:
+# Or directly:
 smh bench
 ```
 
-Elide incrementally compiles the application and packages a deterministic JAR. SMH
-hashes build inputs and verifies cached artifacts before reuse. Every invocation
-runs fresh measurements. Use `smh bench --rebuild` to force compilation. Full compiler
-logs and cache decisions are saved in the printed build-log location. Use
-`--verbose` to replay build diagnostics before the benchmark report.
+The build configuration's `prepare` command runs once before SMH validates the
+application JAR or checks the benchmark cache. Elide incrementally compiles the
+application and packages a deterministic JAR. SMH hashes build inputs and verifies
+cached artifacts before reuse. Missing or changed application outputs are rebuilt
+before measurement; unchanged bytes preserve the benchmark cache. Every invocation
+runs fresh measurements. Use `smh bench --rebuild` to force benchmark compilation.
+Preparation output, full compiler logs, and cache decisions are saved in the
+printed log locations. Use `--verbose` to replay build diagnostics before the
+benchmark report. A failed preparation stops the run before measurement.
 
 Each input size gets **100 warmup iterations and 1,000 measured iterations**, with
 a 1 ms target per iteration. These are iteration scores, not 1,000 individual
@@ -69,7 +72,7 @@ does not establish general measurement accuracy.
 
 ## Startup and soak
 
-After assembling the application, try the compact mode-specific views:
+Try the compact mode-specific views; SMH assembles the application automatically:
 
 ```sh
 smh bench --mode startup --launches 20 --output build/startup --display tui
@@ -82,6 +85,10 @@ readiness and `--until exit` selects the full process lifetime. Soak measures ea
 size for the full duration after warmup. Histograms retain the distribution;
 launch order and soak timelines retain history. See [Experiment modes](../../docs/EXPERIMENTS.md)
 for simulation commands and exact measurement boundaries.
+
+Both invoice sizes run in interleaved rounds and share colored distribution and
+launch-order charts. The `lines=10` and `lines=1000` series update after each launch.
+These are different workloads, so neither is called a winner.
 
 The live view clears before the final startup report appears. Build/cache details stay in
 `build.log` under the experiment directory; `--verbose` prints them before results.
@@ -132,15 +139,20 @@ Commands, diagnostics, artifact hashes, and raw measurements are retained under
 `build/invoice-tests/` and `build/codspeed-tests/`. CI runs the same check on Linux
 amd64 and retains artifacts even on failure.
 
-Startup variants now run in interleaved rounds and share colored distribution
-and launch-order charts. From this directory:
+To compare whole-application startup, use command candidates with preparation
+outside the measured launches. From this directory, with JDK 25 `java` on `PATH`:
 
 ```sh
-elide run assemble
-smh bench --mode startup --launches 20 --until first-result
+smh --mode startup --launches 20 \
+  --prepare elide run assemble \
+  --candidate java -jar build/invoice-app.jar \
+  --candidate java -Xint -jar build/invoice-app.jar
 ```
 
-The `lines=10` and `lines=1000` series update after each launch. The live view is
-replaced by one clean final report. These are different workloads, so neither is
-called a winner. For comparisons between equivalent command implementations,
-see [interleaved command comparisons](../../docs/EXPERIMENTS.md#interleaved-command-comparisons).
+The second candidate uses interpreted execution as an illustration; it does not
+configure a C2 benchmark. Both candidates run the same application through process
+exit, including printing its total. This differs from the benchmark-method startup
+boundary above. SMH runs preparation once before all launches, logs command output,
+and compares the observed means. Failed launches stop the comparison; they are
+not replaced by an automatic rebuild and retry. See
+[interleaved command comparisons](../../docs/EXPERIMENTS.md#interleaved-command-comparisons).

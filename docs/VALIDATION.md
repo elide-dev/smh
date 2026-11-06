@@ -186,3 +186,10 @@ fastest-observed comparison record, and exercises failure after a live frame has
 opened. It checks alternate-screen restoration and absence of transient progress
 in the final report. The ordinary invoice runs verify grouped charts, raw sample
 retention and the same final-screen lifecycle.
+
+Preparation checks cover missing generated inputs, unchanged-input cache reuse,
+changed-input invalidation, direct argv and working-directory fidelity, dry-run
+planning, and failure before measurement. The native terminal suite also generates
+an absent candidate script, runs repeated preparation before rotating launches,
+cleans the reserved experiment directory during preparation, and verifies retained
+logs, machine-readable failures, and result-only stdout.

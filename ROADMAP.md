@@ -288,6 +288,13 @@ architecture or running under emulation does not qualify native timing.
   SIGINT cleanup. Receipts: `build/variant-validation/`. Statistical winner/regression
   decisions remain tracked separately in F07-06.
 
+- [x] F07-13: Prepare missing or stale application inputs before validation, cache
+  lookup, and measurement; support repeated direct-command preparation while
+  retaining clean-build and interrupted-run diagnostics. Contracts:
+  [Usage](docs/USAGE.md), [Assurance](docs/ASSURANCE.md#preparation-before-measurement).
+  Evidence: 181 passing JVM tests and coverage gates, native terminal/interrupt checks, and missing
+  invoice JAR rebuild followed by a cache hit in `build/preparation-validation/`.
+
 ## M8 — security, releases, and OpenSSF
 
 - [ ] F08-01: Document security reporting, threat model, supported versions, governance, reviews, and contribution rules.

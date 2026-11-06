@@ -33,7 +33,7 @@ final class CliErrors {
           "Application dependency not found",
           detail.substring("Missing classpath entry: ".length()),
           List.of(
-              "Build/package the application JAR first, then rerun this command.",
+              "Declare prepare in the build config to build/package this JAR before each run.",
               "For an Elide project with an assemble task: elide run assemble",
               "Check classpath in the build config; paths are relative to that file."));
     if (error instanceof NoSuchFileException)
@@ -72,6 +72,25 @@ final class CliErrors {
           List.of(
               "Inspect the retained launch stdout/stderr for blocked setup or cleanup.",
               "Fix the workload or increase --timeout (for example, --timeout 60s)."));
+    if (detail.startsWith("Startup process failed"))
+      return new Problem(
+          "SMH-STARTUP-FAILED",
+          "Candidate could not start successfully",
+          detail,
+          List.of(
+              "Check the command, its input files, and the current working directory.",
+              "For generated inputs, use --prepare before --candidate, or prepare in the build"
+                  + " config.",
+              "Open the launch log named above; failed launches are not retried or scored."));
+    if (detail.startsWith("Preparation command failed"))
+      return new Problem(
+          "SMH-PREPARE-FAILED",
+          "Build preparation failed",
+          detail,
+          List.of(
+              "Open the preparation log named above and fix the reported build error.",
+              "Check the preparation command and its working directory; no timed launch has"
+                  + " started."));
     if (error instanceof JsonParseException)
       return new Problem(
           "SMH-CONFIG-JSON",

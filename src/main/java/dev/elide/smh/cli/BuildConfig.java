@@ -15,6 +15,8 @@ public final class BuildConfig {
   public Path cremaHost;
   public String execution = "aot";
   public final List<String> runtimeArgs = new ArrayList<>();
+  public final List<String> prepare = new ArrayList<>();
+  Path directory = Path.of("").toAbsolutePath();
   public Path output;
   public final List<Path> sources = new ArrayList<>();
   public final List<Path> classpath = new ArrayList<>();
@@ -51,6 +53,7 @@ public final class BuildConfig {
             "cremaHost",
             "execution",
             "runtimeArgs",
+            "prepare",
             "output",
             "sources",
             "classpath",
@@ -67,6 +70,7 @@ public final class BuildConfig {
       if (!allowed.contains(key))
         throw new IllegalArgumentException("Unknown build option: " + key);
     BuildConfig c = new BuildConfig();
+    c.directory = base;
     c.home =
         homeOverride != null
             ? homeOverride.toAbsolutePath()
@@ -85,6 +89,16 @@ public final class BuildConfig {
     if (j.has("execution")) c.execution = j.get("execution").getAsString();
     if (j.has("runtimeArgs"))
       j.getAsJsonArray("runtimeArgs").forEach(v -> c.runtimeArgs.add(v.getAsString()));
+    if (j.has("prepare")) {
+      if (!j.get("prepare").isJsonArray())
+        throw new IllegalArgumentException("prepare must be an executable/argument array");
+      for (JsonElement argument : j.getAsJsonArray("prepare")) {
+        if (!argument.isJsonPrimitive() || !argument.getAsJsonPrimitive().isString())
+          throw new IllegalArgumentException("prepare arguments must be strings");
+        c.prepare.add(argument.getAsString());
+      }
+      BuildPreparation.validate(c.prepare);
+    }
     if (j.has("classpath"))
       j.getAsJsonArray("classpath")
           .forEach(v -> c.classpath.add(base.resolve(v.getAsString()).normalize()));
@@ -110,6 +124,10 @@ public final class BuildConfig {
   }
 
   public void validate() {
+    validate(true);
+  }
+
+  void validate(boolean requireClasspath) {
     if (!Set.of("aot", "crema", "hotspot", "hotspot-c2").contains(execution))
       throw new IllegalArgumentException("execution must be aot, crema, hotspot or hotspot-c2");
     if (!execution.equals("aot") && (shared || !pgo.equals("off") || observer != null))
@@ -144,9 +162,10 @@ public final class BuildConfig {
         || !Files.isRegularFile(home.resolve("smh-runtime.jar")))
       throw new IllegalArgumentException(
           "SMH distribution not found at " + home + "; run mise run build or set --home");
-    for (Path path : classpath)
-      if (!Files.exists(path))
-        throw new IllegalArgumentException("Missing classpath entry: " + path);
+    if (requireClasspath)
+      for (Path path : classpath)
+        if (!Files.exists(path))
+          throw new IllegalArgumentException("Missing classpath entry: " + path);
     for (String arg : nativeArgs)
       if (arg.startsWith("-O")
           || arg.startsWith("--pgo")

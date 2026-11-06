@@ -26,6 +26,12 @@ class CliErrorsTest {
     cases.put(new AccessDeniedException("results"), "SMH-PERMISSION");
     cases.put(new IOException("Cannot run program native-image"), "SMH-TOOL-UNAVAILABLE");
     cases.put(new IOException("Startup timed out; see launch-1"), "SMH-STARTUP-TIMEOUT");
+    cases.put(
+        new IOException("Startup process failed (exit 7): missing module; log: stderr.log"),
+        "SMH-STARTUP-FAILED");
+    cases.put(
+        new IOException("Preparation command failed (exit 2); logs: prepare-0"),
+        "SMH-PREPARE-FAILED");
     cases.put(new JsonSyntaxException("Malformed object"), "SMH-CONFIG-JSON");
     cases.put(new IllegalArgumentException("duration must be positive"), "SMH-CONFIG");
     cases.put(new IOException("compiler failed"), "SMH-IO");

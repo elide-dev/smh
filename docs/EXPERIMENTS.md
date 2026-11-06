@@ -163,29 +163,41 @@ it, and summarizes early versus late observations without hiding any windows:
 
 ## Interleaved command comparisons
 
-Compare complete command startup on the same host:
+Compare complete command startup on the same host. This example runs from
+`examples/invoice-app`, using a JDK 25 `java` on `PATH`:
 
 ```sh
 smh --mode startup --launches 20 --output build/startup-compare \
-  --candidate elide run app.js \
-  --candidate bun run app.js
+  --prepare elide run assemble \
+  --candidate java -jar build/invoice-app.jar \
+  --candidate java -Xint -jar build/invoice-app.jar
 ```
 
-Put **all SMH options before the first `--candidate`**. Each candidate consumes
-argv through the next `--candidate` or the end of the command line. Quote an
-individual argument containing spaces normally. SMH executes argv directly;
-there is no shell expansion, pipeline, or implicit shell startup. Explicitly
-invoke a shell if that is the program you intend to measure. The literal
-`--candidate` token is reserved as a separator.
+The second candidate runs in interpreted mode as an illustration, not as a C2
+benchmark configuration. Both candidates execute the same packaged application.
+For benchmark-method startup with both invoice sizes, use
+`smh bench --mode startup --launches 20`; its build configuration assembles the
+application automatically.
+
+Put **all ordinary SMH options before the first `--prepare` or `--candidate`**,
+and preparation commands before candidates. Each command consumes argv through
+the next `--prepare` or `--candidate` or the end of the command line. Repeat
+`--prepare` for multiple preparation commands; SMH runs them once in order before
+any timed launch. Quote an individual argument containing spaces normally. SMH
+executes argv directly; there is no shell expansion, pipeline, or implicit shell
+startup. Explicitly invoke a shell if that is the program you intend to measure.
+The literal `--prepare` and `--candidate` tokens are reserved as separators.
 
 Command comparisons currently use wall time through successful process exit.
 `--until exit` is implicit. For instrumented ready/first-result or Callgrind
 measurements, use `smh bench`. Commands must finish without interactive input and wait for their subprocesses;
 daemonizing/background commands are outside this measurement contract.
-Prepare builds and caches before starting the comparison if compilation should
-not be included: everything the command does before exit is timed. Each command
-inherits the current working directory and environment. No cache flushing or
-warmup launches are performed.
+Use `--prepare` for application builds that should be excluded: everything a
+candidate does before exit is timed. Preparation and candidate commands inherit
+the current working directory and environment. Preparation output goes to logs;
+a preparation failure stops the experiment before measurement. Missing outputs
+or other failures during a measured launch do not trigger a rebuild and retry.
+No cache flushing or warmup launches are performed.
 
 Each round runs every candidate once, serially; the first candidate rotates on
 successive rounds. The same scheduling applies to discovered `smh bench` startup

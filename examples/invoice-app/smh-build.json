@@ -1,5 +1,6 @@
 {
   "home": "../../build",
+  "prepare": ["elide", "run", "assemble"],
   "sources": ["benchmarks"],
   "classpath": ["build/invoice-app.jar"],
   "output": "build/benchmarks",

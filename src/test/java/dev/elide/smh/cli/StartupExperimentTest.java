@@ -52,7 +52,7 @@ class StartupExperimentTest {
             System.out.println("diagnostic"); System.out.println();
             if(!action.equals("missing"))System.out.println("SMH_STARTUP "+System.getenv("SMH_STARTUP_TOKEN"));
             if(action.equals("duplicate"))System.out.println("SMH_STARTUP "+System.getenv("SMH_STARTUP_TOKEN"));
-            if(action.equals("fail"))System.exit(2);
+            if(action.equals("fail")) {System.err.println("Missing application input"); System.exit(2);}
             System.out.println("[]");
             """);
     for (String action : List.of("ok", "exit", "missing", "duplicate", "fail", "sleep")) {
@@ -66,15 +66,21 @@ class StartupExperimentTest {
         assertEquals("[]", launch.result());
         if (action.equals("exit")) assertEquals(launch.endpointNanos(), launch.completionNanos());
       } else {
-        assertThrows(
-            Exception.class,
-            () ->
-                StartupExperiment.execute(
-                    child(source, action),
-                    run,
-                    action.equals("sleep") ? 100_000_000L : 30_000_000_000L,
-                    "token",
-                    false));
+        Exception failure =
+            assertThrows(
+                Exception.class,
+                () ->
+                    StartupExperiment.execute(
+                        child(source, action),
+                        run,
+                        action.equals("sleep") ? 100_000_000L : 30_000_000_000L,
+                        "token",
+                        false));
+        if (action.equals("fail")) {
+          assertTrue(failure.getMessage().contains("exit 2"));
+          assertTrue(failure.getMessage().contains("Missing application input"));
+          assertTrue(failure.getMessage().contains(run.resolve("stderr.log").toString()));
+        }
         assertEquals(
             "failed",
             JsonParser.parseString(Files.readString(run.resolve("failure.json")))
@@ -100,6 +106,30 @@ class StartupExperimentTest {
                 1_000_000_000L,
                 "token",
                 false));
+  }
+
+  @Test
+  void launchFailureSummaryIsBoundedAndLogsRemainUntouched() throws Exception {
+    Path stderr = directory.resolve("stderr.log");
+    assertTrue(
+        StartupExperiment.failedLaunch(3, stderr)
+            .getMessage()
+            .contains("Could not read launch diagnostics"));
+    Files.writeString(stderr, "\n   \n");
+    assertTrue(
+        StartupExperiment.failedLaunch(3, stderr).getMessage().contains("No diagnostic on stderr"));
+    String raw = "\n\033[31mMissing application\033[0m\n  stack trace\n";
+    Files.writeString(stderr, raw);
+    String summary = StartupExperiment.failedLaunch(3, stderr).getMessage();
+    assertTrue(summary.contains("exit 3"));
+    assertTrue(summary.contains("Missing application"));
+    assertFalse(summary.contains("\033"));
+    assertFalse(summary.contains("stack trace"));
+    assertEquals(raw, Files.readString(stderr));
+    Files.writeString(stderr, "x".repeat(5000));
+    summary = StartupExperiment.failedLaunch(3, stderr).getMessage();
+    assertTrue(summary.contains("x".repeat(240) + "…"));
+    assertFalse(summary.contains("x".repeat(241)));
   }
 
   static String dump(int part, String trigger, String count) {

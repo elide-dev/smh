@@ -540,3 +540,39 @@ recordings, coverage and artifact hashes are retained in
 `build/variant-validation/`, with the broader native terminal recordings under
 `build/terminal-tests/`. These are behavior and presentation checks, not evidence
 that one workload or execution engine is faster in general.
+
+## Preparation before measurement
+
+Build configurations may declare direct preparation argv. The CLI invokes it once
+before classpath validation and content-cache lookup for build, bench, and JMH
+jobs. Command comparisons accept repeated preparation commands; every preparation
+finishes before the first measured launch. Preparation never runs inside an active
+startup measurement, and a failed launch is never replaced by a rebuild and retry.
+Incremental compilation belongs to the declared builder; SMH fingerprints its
+resulting inputs. Concurrent builders that rewrite the same project inputs are
+not serialized by this preparation mechanism. Cache publication still rechecks
+input identity after compilation.
+
+Build output is staged outside mutable project outputs. Effective run files are
+written after preparation, and completed preparation logs are archived until the
+whole group finishes, so clean steps cannot erase earlier evidence. Shutdown
+cleanup stops the active build process before publishing its output and argv and
+restoring earlier logs. If publication is blocked, retained temporary paths are
+reported without replacing the original build failure. Startup failures include
+the child exit code and a bounded, sanitized first stderr line; complete launch
+diagnostics and failure records remain on disk.
+
+JVM checks cover missing-input repair, unchanged-input reuse, changed-input cache
+invalidation, argv/cwd fidelity, dry-run planning, repeated clean steps, failed
+preparation, blocked publication, cleanup ordering, and absence of launch retries.
+Native checks exercise preparation and interruption through the packaged CLI;
+the invoice check removes its JAR before invoking startup benchmarks, then repeats
+the run to verify unchanged-input cache reuse. Local commands, logs, coverage,
+and artifact hashes are retained under `build/preparation-validation/`, with the
+terminal suite's recordings under `build/terminal-tests/`. These checks establish
+orchestration behavior, not comparative performance accuracy or a hosted CI pass.
+
+The final JVM run passes all 181 tests without skips: 4,402/4,422 production lines
+(99.55%), 2,557/2,581 branches (99.07%), and the entire mathematical kernel
+(151 lines, 68 branches). Lint and all 31 Python tool tests pass. Native evidence
+uses the rebuilt Linux AMD64 CLI with Native Image 25.0.4.1.

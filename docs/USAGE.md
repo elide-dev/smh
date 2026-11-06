@@ -183,9 +183,9 @@ Unassessed phases are omitted. Non-success stopping reasons remain visible.
 There are no warmup sparklines or inferred JIT curves. VM/JDK details appear once
 in the final footer. Full observations and phase metadata remain in the JSON report.
 
-Native compilation saves full commands and diagnostics to logs, printing a compact
-completion line and a path relative to the working directory. Failures replay diagnostics; `--verbose` also shows
-successful build logs. Routine Micronaut startup logs are muted.
+Preparation and native compilation save commands and diagnostics to logs, printing
+compact status messages and log paths. Use `--verbose` to replay build diagnostics
+before the report. Routine Micronaut startup logs are muted.
 
 Choose `--display auto`, `--display plain`, or `--display tui`.
 Automatic animation is disabled for redirected output, `CI`, `TERM=dumb`, and
@@ -275,9 +275,35 @@ output; directory symlinks require explicit resolved input paths. Processes shar
 an output directory serialize cache publication. Existing base-layer sharing across
 different output directories is not a cross-process build lock.
 
-The nested sample's `elide run bench` first builds its application with Elide and
-packages a deterministic JAR, then invokes `smh bench`. Unchanged application bytes
-therefore preserve the native cache key. See its [guide](../examples/invoice-app/README.md).
+For application dependencies that need building, declare a preparation command in
+the build configuration:
+
+```json
+{
+  "prepare": ["elide", "run", "assemble"]
+}
+```
+
+`smh build`, `smh bench`, and `smh jmh` run this argv once from the configuration
+file's directory, before validating classpath entries or looking up a cached
+artifact. The command executes directly, without shell expansion. It should
+incrementally rebuild missing or changed application outputs; SMH then hashes the
+resulting inputs and reuses the benchmark artifact when its bytes are unchanged.
+Preparation is outside measurement, and its output is logged. A failed preparation
+stops the command before any benchmark launches. SMH never retries a failed
+measured launch by rebuilding and silently replacing its observation.
+Preparation runs before the artifact cache lock; do not run other builders that
+rewrite the same project inputs concurrently. SMH checks input identity again
+before publishing a newly compiled cache entry.
+
+`smh build --dry-run` prints the preparation command and build plan without
+executing preparation. Classpath outputs that preparation would create may be
+missing during this preview. Source inputs, SDK files, and the toolchain needed
+to construct the build plan must still be available.
+
+The nested sample configures `elide run assemble`, so both `smh bench` and
+`elide run bench` build the application on demand and package a deterministic JAR.
+See its [guide](../examples/invoice-app/README.md).
 
 See [Experiment modes](EXPERIMENTS.md) for fresh-process startup boundaries,
 full-budget soak, and the different wall-time and simulated-work axes.
@@ -292,18 +318,18 @@ usage dump. Compiler failures retain their full output in compiler logs; use
 `--verbose` to replay it before the error summary. Exit codes remain 2 for command syntax and 1 for command exceptions;
 delegated benchmark processes retain their own exit codes.
 
-For example, a missing invoice application JAR reports `SMH-CLASSPATH-MISSING`
-and explains that the application must be packaged first. From
-`examples/invoice-app`, run:
+For example, `SMH-CLASSPATH-MISSING` means a configured application dependency
+was not produced or its path is wrong. Configure `prepare` to assemble it before
+validation, or build the dependency separately. The invoice sample already
+configures preparation; from `examples/invoice-app`, run:
 
 ```sh
-elide run assemble
 smh build --config smh-build.json
 ```
 
-Changing benchmark sources does not build the application JAR. Check `classpath`
-in the build configuration if the application was packaged elsewhere; those
-paths are relative to the configuration file.
+Check the preparation log if assembly fails. Check `classpath` in the build
+configuration if the application was packaged elsewhere; those paths are relative
+to the configuration file.
 
 Agents can select a single-line JSON error record with the inherited option:
 
@@ -329,19 +355,27 @@ precede it. Successful stdout and delegated-process output are unchanged.
 | `SMH-PERMISSION` | Check access to the named path. |
 | `SMH-TOOL-UNAVAILABLE` | Check the tool's installation, executable permissions, and configured path. |
 | `SMH-STARTUP-TIMEOUT` | Inspect launch logs, fix blocked work, or increase `--timeout`. |
+| `SMH-STARTUP-FAILED` | Check the reported exit code and launch error; fix the command or declare preparation for missing inputs. |
+| `SMH-PREPARE-FAILED` | Inspect the preparation log and fix the build command; no timed launch has started. |
 | `SMH-CONFIG-JSON` | Correct JSON syntax or value types. |
 | `SMH-CONFIG` | Correct the setting named in the message. |
 | `SMH-BUILD-FAILED` | Open the compiler log and fix its first error; use `--verbose` to replay diagnostics. |
 | `SMH-IO` | Inspect diagnostic/build/launch logs and fix the underlying I/O or tool failure. |
 | `SMH-INTERNAL` | Retain the diagnostic file and report a minimal reproduction with the SMH version. |
 
-For direct command startup comparisons, put SMH options first and separate argv
-with repeated `--candidate`:
+For direct command startup comparisons, put SMH options first, optional preparation
+commands next, and candidates last. This runnable example uses the invoice sample
+from `examples/invoice-app`:
 
 ```sh
-smh --mode startup --launches 20 --candidate elide run app.js --candidate bun run app.js
+smh --mode startup --launches 20 \
+  --prepare elide run assemble \
+  --candidate java -jar build/invoice-app.jar \
+  --candidate java -Xint -jar build/invoice-app.jar
 ```
 
-Candidates run serially in rotating rounds; their output goes to per-launch log
-files. The final report overlays distributions and names the fastest observed
-mean. See [contracts, limits and live charts](EXPERIMENTS.md#interleaved-command-comparisons).
+All preparation finishes before timed launches begin. Candidates run serially in
+rotating rounds; their output goes to per-launch log files. The second candidate
+uses interpreted execution to illustrate comparison; this is not a C2 benchmark
+configuration. The final report overlays distributions and names the fastest
+observed mean. See [contracts, limits and live charts](EXPERIMENTS.md#interleaved-command-comparisons).

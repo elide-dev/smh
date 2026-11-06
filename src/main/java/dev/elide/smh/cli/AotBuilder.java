@@ -38,7 +38,7 @@ public class AotBuilder {
   }
 
   public Path build(BuildConfig c, boolean dryRun, boolean baseOnly) throws Exception {
-    c.validate();
+    c.validate(!dryRun || c.prepare.isEmpty());
     if (!c.execution.equals("aot"))
       throw new IllegalArgumentException("Use smh bench for runtime-loaded execution");
     if (baseOnly && !c.layers) throw new IllegalArgumentException("--base-only requires layers");

@@ -4,6 +4,7 @@ package dev.elide.smh.cli;
 
 import com.google.gson.*;
 import java.io.Console;
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import picocli.CommandLine.*;
@@ -13,16 +14,83 @@ import picocli.CommandLine.Model.*;
 final class StartupCandidates {
   private StartupCandidates() {}
 
+  /** Completed build logs survive later clean steps and remain recoverable if publication fails. */
+  static final class PreparationFiles {
+    final Path directory;
+    final Path staging;
+    private final JsonObject settings;
+    private final List<String> candidates;
+    private final List<String> preparations;
+    private final Map<Path, Path> logs = new LinkedHashMap<>();
+    volatile boolean published;
+
+    PreparationFiles(
+        Path directory, JsonObject settings, List<String> candidates, List<String> preparations)
+        throws IOException {
+      this.directory = directory;
+      this.settings = settings;
+      this.candidates = candidates;
+      this.preparations = preparations;
+      staging = Files.createTempDirectory("smh-preparation-");
+    }
+
+    synchronized void retain(Path source) throws IOException {
+      try (var files = Files.list(source)) {
+        for (Path file : files.filter(Files::isRegularFile).toList()) {
+          Path saved = staging.resolve(source.getFileName() + "-" + file.getFileName());
+          Files.copy(file, saved);
+          logs.put(file, saved);
+        }
+      }
+    }
+
+    synchronized void publish() throws IOException {
+      if (published) return;
+      try {
+        Files.createDirectories(directory);
+        for (var entry : logs.entrySet()) {
+          Files.createDirectories(entry.getKey().getParent());
+          Files.copy(entry.getValue(), entry.getKey(), StandardCopyOption.REPLACE_EXISTING);
+        }
+        Files.writeString(directory.resolve("commands.json"), candidates.toString());
+        Files.writeString(directory.resolve("run.json"), settings.toString());
+        Files.writeString(directory.resolve("prepare.json"), preparations.toString());
+        published = true;
+      } catch (IOException failure) {
+        throw new IOException(
+            "Could not publish preparation logs; retained at " + staging, failure);
+      }
+    }
+
+    void shutdown(TerminalDisplay.BuildScope scope) {
+      scope.finishBuild();
+      try {
+        publish();
+      } catch (IOException failure) {
+        System.err.println("  Preparation logs retained · " + TerminalDisplay.path(staging));
+      }
+    }
+
+    synchronized void discard() throws IOException {
+      try (var files = Files.list(staging)) {
+        for (Path file : files.toList()) Files.delete(file);
+      }
+      Files.delete(staging);
+      logs.clear();
+    }
+  }
+
   public static final class Arguments implements IParameterConsumer {
     @Override
     public void consumeParameters(Stack<String> args, ArgSpec option, CommandSpec command) {
       List<String> argv = new ArrayList<>();
-      while (!args.isEmpty() && !args.peek().equals("--candidate")) argv.add(args.pop());
+      while (!args.isEmpty() && !Set.of("--candidate", "--prepare").contains(args.peek()))
+        argv.add(args.pop());
       if (argv.isEmpty())
         throw new ParameterException(
             command.commandLine(),
-            "--candidate needs an executable and optional arguments; put SMH options before"
-                + " candidates");
+            ((OptionSpec) option).longestName()
+                + " needs an executable and optional arguments; put SMH options before commands");
       List<String> candidates = option.getValue();
       candidates.add(new Gson().toJson(argv));
       option.setValue(candidates);
@@ -31,11 +99,21 @@ final class StartupCandidates {
 
   static int run(List<String> candidates, ExperimentOptions options, TerminalDisplay.Mode display)
       throws Exception {
+    return run(candidates, options, display, List.of());
+  }
+
+  static int run(
+      List<String> candidates,
+      ExperimentOptions options,
+      TerminalDisplay.Mode display,
+      List<String> preparations)
+      throws Exception {
     return run(
         candidates,
         options,
         display,
-        Optional.ofNullable(System.console()).map(Console::isTerminal).orElse(false));
+        Optional.ofNullable(System.console()).map(Console::isTerminal).orElse(false),
+        preparations);
   }
 
   static int run(
@@ -43,6 +121,16 @@ final class StartupCandidates {
       ExperimentOptions options,
       TerminalDisplay.Mode display,
       boolean terminal)
+      throws Exception {
+    return run(candidates, options, display, terminal, List.of());
+  }
+
+  static int run(
+      List<String> candidates,
+      ExperimentOptions options,
+      TerminalDisplay.Mode display,
+      boolean terminal,
+      List<String> preparations)
       throws Exception {
     if (!"startup".equals(options.mode))
       throw new IllegalArgumentException("--candidate requires --mode startup");
@@ -62,11 +150,33 @@ final class StartupCandidates {
     long timeout =
         options.timeout == null ? 30_000_000_000L : ExperimentOptions.nanos(options.timeout);
     Path directory = options.directory();
-    Files.writeString(directory.resolve("commands.json"), candidates.toString());
     settings.addProperty("launches", launches);
     settings.addProperty("timeoutNanos", timeout);
     settings.addProperty("schedule", "rotating-rounds");
-    Files.writeString(directory.resolve("run.json"), settings.toString());
+    var prepared = new PreparationFiles(directory, settings, candidates, preparations);
+    var scope = new TerminalDisplay.BuildScope();
+    Thread shutdown = new Thread(() -> prepared.shutdown(scope), "smh-preparation-cleanup");
+    Runtime.getRuntime().addShutdownHook(shutdown);
+    TerminalDisplay.BUILD_SCOPE.set(scope);
+    try {
+      for (int i = 0; i < preparations.size(); i++) {
+        List<String> command =
+            JsonParser.parseString(preparations.get(i)).getAsJsonArray().asList().stream()
+                .map(JsonElement::getAsString)
+                .toList();
+        Path logs = directory.resolve("prepare-" + i);
+        BuildPreparation.run(command, Path.of("").toAbsolutePath(), logs, false);
+        prepared.retain(logs);
+      }
+    } finally {
+      TerminalDisplay.BUILD_SCOPE.remove();
+      BuildLog.removeHook(shutdown);
+      prepared.shutdown(scope);
+      if (prepared.published) prepared.discard();
+    }
+    if (!prepared.published)
+      throw new IOException(
+          "Could not publish preparation metadata; logs retained at " + prepared.staging);
     boolean visual = TerminalDisplay.enabled(display, terminal, System.getenv());
     JsonArray results = new JsonArray();
     List<List<String>> commands = new ArrayList<>();

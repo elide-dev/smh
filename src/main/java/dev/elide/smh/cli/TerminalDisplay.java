@@ -309,6 +309,44 @@ final class TerminalDisplay {
 
   static final ThreadLocal<PrintStream> BUILD_LOG = new ThreadLocal<>();
 
+  static final ThreadLocal<BuildScope> BUILD_SCOPE = new ThreadLocal<>();
+
+  static final class BuildScope {
+    volatile Runnable cleanup = () -> {};
+
+    void finishBuild() {
+      cleanup.run();
+    }
+  }
+
+  static final class BuildCleanup implements Runnable {
+    private final BuildLog output;
+    private final BuildLog command;
+    private Process child;
+    private boolean complete;
+
+    BuildCleanup(BuildLog output, BuildLog command) {
+      this.output = output;
+      this.command = command;
+    }
+
+    synchronized Process start(ProcessBuilder builder) throws IOException {
+      if (complete) throw new IOException("Build interrupted before process launch");
+      child = builder.start();
+      child.getOutputStream().close();
+      return child;
+    }
+
+    @Override
+    public synchronized void run() {
+      if (complete) return;
+      terminate(child);
+      output.publish();
+      command.publish();
+      complete = true;
+    }
+  }
+
   static PrintStream buildMessages() {
     return Optional.ofNullable(BUILD_LOG.get()).orElse(System.err);
   }
@@ -337,17 +375,23 @@ final class TerminalDisplay {
       PrintStream err)
       throws Exception {
     Files.createDirectories(directory);
-    Path log = Files.createTempFile(directory, "compiler-", ".log");
-    Path command = Path.of(log + ".command.json");
-    Files.writeString(command, new Gson().toJson(builder.command()));
-    Process child = null;
-    Thread shutdown = null;
+    Path staging = Files.createTempFile("compiler-", ".log");
+    Path log = directory.resolve(staging.getFileName());
+    Path stagedCommand =
+        Files.writeString(Path.of(staging + ".command.json"), new Gson().toJson(builder.command()));
+    BuildLog output = new BuildLog(staging, log, System.err);
+    BuildCleanup cleanup =
+        new BuildCleanup(
+            output, new BuildLog(stagedCommand, Path.of(log + ".command.json"), System.err));
+    BuildScope scope = BUILD_SCOPE.get();
+    if (scope != null) scope.cleanup = cleanup;
+    Thread shutdown = new Thread(cleanup, "smh-build-cleanup");
+    Runtime.getRuntime().addShutdownHook(shutdown);
     long start = System.nanoTime();
+    int status;
     try {
-      child = builder.redirectErrorStream(true).redirectOutput(log.toFile()).start();
-      Process running = child;
-      shutdown = new Thread(() -> terminate(running), "smh-build-cleanup");
-      Runtime.getRuntime().addShutdownHook(shutdown);
+      Process child =
+          cleanup.start(builder.redirectErrorStream(true).redirectOutput(staging.toFile()));
       int tick = 0;
       while (!child.waitFor(80, TimeUnit.MILLISECONDS)) {
         if (animate) {
@@ -355,21 +399,23 @@ final class TerminalDisplay {
           err.flush();
         }
       }
-      int status = child.exitValue();
-      if (animate) err.print("\r\033[2K");
-      err.printf(
-          Locale.ROOT,
-          "  %s · %s · %.2f s · log: %s%n",
-          title,
-          status == 0 ? "complete" : "failed",
-          (System.nanoTime() - start) / 1e9,
-          path(log));
-      if (verbose) Files.copy(log, err);
-      return status;
+      status = child.exitValue();
     } finally {
-      terminate(child);
-      if (shutdown != null) Runtime.getRuntime().removeShutdownHook(shutdown);
+      cleanup.run();
+      if (scope != null) scope.cleanup = () -> {};
+      BuildLog.removeHook(shutdown);
     }
+    log = output.publish();
+    if (animate) err.print("\r\033[2K");
+    err.printf(
+        Locale.ROOT,
+        "  %s · %s · %.2f s · log: %s%n",
+        title,
+        status == 0 ? "complete" : "failed",
+        (System.nanoTime() - start) / 1e9,
+        path(log));
+    if (verbose) Files.copy(log, err);
+    return status;
   }
 
   static String clean(String value) {

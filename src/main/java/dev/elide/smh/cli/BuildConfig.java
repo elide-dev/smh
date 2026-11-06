@@ -28,6 +28,7 @@ public final class BuildConfig {
   public boolean shared;
   public boolean verbose;
   public final List<Path> cacheInputs = new ArrayList<>();
+  public final List<String> cacheEnvironment = new ArrayList<>();
   public String observer;
   public final List<String> nativeArgs = new ArrayList<>();
 
@@ -65,7 +66,8 @@ public final class BuildConfig {
             "shared",
             "nativeArgs",
             "observer",
-            "cacheInputs");
+            "cacheInputs",
+            "cacheEnvironment");
     for (String key : j.keySet())
       if (!allowed.contains(key))
         throw new IllegalArgumentException("Unknown build option: " + key);
@@ -105,6 +107,17 @@ public final class BuildConfig {
     if (j.has("cacheInputs"))
       j.getAsJsonArray("cacheInputs")
           .forEach(v -> c.cacheInputs.add(base.resolve(v.getAsString()).normalize()));
+    if (j.has("cacheEnvironment")) {
+      if (!j.get("cacheEnvironment").isJsonArray())
+        throw new IllegalArgumentException("cacheEnvironment must be an array of variable names");
+      for (JsonElement name : j.getAsJsonArray("cacheEnvironment")) {
+        if (!name.isJsonPrimitive()
+            || !name.getAsJsonPrimitive().isString()
+            || name.getAsString().isBlank())
+          throw new IllegalArgumentException("cacheEnvironment names must be nonempty strings");
+        c.cacheEnvironment.add(name.getAsString());
+      }
+    }
     if (j.has("optimization")) c.optimization = j.get("optimization").getAsString();
     if (j.has("pgo")) c.pgo = j.get("pgo").getAsString();
     if (j.has("profile")) c.profile = base.resolve(j.get("profile").getAsString()).normalize();

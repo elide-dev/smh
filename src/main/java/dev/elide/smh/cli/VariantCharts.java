@@ -32,6 +32,14 @@ final class VariantCharts {
     return List.copyOf(groups.values());
   }
 
+  /** Only fresh-process launch rows share an axis; their scores describe the same boundary. */
+  static boolean overlay(List<JsonObject> group) {
+    JsonObject smh = group.getFirst().has("smh") ? group.getFirst().getAsJsonObject("smh") : null;
+    return smh != null
+        && smh.has("experimentMode")
+        && smh.get("experimentMode").getAsString().equals("startup");
+  }
+
   static List<Double> samples(JsonObject row) {
     List<Double> result = new ArrayList<>();
     for (JsonElement fork : row.getAsJsonObject("primaryMetric").getAsJsonArray("rawData"))

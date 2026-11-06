@@ -19,7 +19,14 @@ final class BenchmarkComparison {
       JsonElement endpoint,
       JsonElement model) {}
 
-  private final Map<Key, Double> scores = new HashMap<>();
+  /** Median and median absolute deviation of retained samples; the score when none exist. */
+  record Stats(double score, double median, double spread, int samples) {
+    boolean dispersed() {
+      return samples > 0 && Math.abs(median) > 0;
+    }
+  }
+
+  private final Map<Key, Stats> baseline = new HashMap<>();
   private final Set<String> origins = new LinkedHashSet<>();
 
   static BenchmarkComparison read(Path file) throws Exception {
@@ -31,7 +38,7 @@ final class BenchmarkComparison {
     for (JsonElement element : rows) {
       JsonObject row = element.getAsJsonObject();
       Key key = key(row);
-      double score = score(row);
+      Stats stats = stats(row);
       JsonObject execution = row.getAsJsonObject("smh").getAsJsonObject("execution");
       origins.add(
           execution == null || !execution.has("backend")
@@ -40,7 +47,7 @@ final class BenchmarkComparison {
                   + " · "
                   + execution.get("backend").getAsString()
                   + (execution.has("aotCacheKey") ? " · Leyden" : ""));
-      if (scores.putIfAbsent(key, score) != null)
+      if (baseline.putIfAbsent(key, stats) != null)
         throw new IllegalArgumentException("Duplicate benchmark identity in baseline");
     }
   }
@@ -74,19 +81,65 @@ final class BenchmarkComparison {
         smh.get("simulationModel"));
   }
 
-  private static double score(JsonObject row) {
-    double score = row.getAsJsonObject("primaryMetric").get("score").getAsDouble();
+  static Stats stats(JsonObject row) {
+    JsonObject metric = row.getAsJsonObject("primaryMetric");
+    double score = metric.get("score").getAsDouble();
     if (!Double.isFinite(score) || score < 0)
       throw new IllegalArgumentException("Comparison requires finite, nonnegative scores");
-    return score;
+    List<Double> samples = new ArrayList<>();
+    if (metric.has("rawData"))
+      for (JsonElement fork : metric.getAsJsonArray("rawData"))
+        for (JsonElement value : fork.getAsJsonArray()) {
+          double sample = value.getAsDouble();
+          if (Double.isFinite(sample)) samples.add(sample);
+        }
+    if (samples.isEmpty()) return new Stats(score, score, Double.NaN, 0);
+    List<Double> sorted = samples.stream().sorted().toList();
+    double median = ResultDetails.median(sorted);
+    return new Stats(score, median, ResultDetails.mad(sorted, median), sorted.size());
   }
 
-  /** Returns a signed percentage; empty means there is no matching, nonzero baseline. */
+  /** Signed percentage change of the median; empty without a matching, nonzero baseline. */
   OptionalDouble change(JsonObject row) {
-    Double previous = scores.get(key(row));
-    double current = score(row);
-    if (previous == null || previous == 0) return OptionalDouble.empty();
-    double percent = (current / previous - 1) * 100;
+    Stats previous = baseline.get(key(row));
+    Stats current = stats(row);
+    if (previous == null || previous.median() == 0) return OptionalDouble.empty();
+    double percent = (current.median() / previous.median() - 1) * 100;
     return Double.isFinite(percent) ? OptionalDouble.of(percent) : OptionalDouble.empty();
+  }
+
+  /**
+   * Descriptive noise band in percent: the sum of both runs' median absolute deviations relative to
+   * their medians. A change inside this band is indistinguishable from iteration spread; this is
+   * not a significance test.
+   */
+  OptionalDouble spread(JsonObject row) {
+    Stats previous = baseline.get(key(row));
+    Stats current = stats(row);
+    if (previous == null || !previous.dispersed() || !current.dispersed())
+      return OptionalDouble.empty();
+    double percent =
+        (previous.spread() / Math.abs(previous.median())
+                + current.spread() / Math.abs(current.median()))
+            * 100;
+    return Double.isFinite(percent) ? OptionalDouble.of(percent) : OptionalDouble.empty();
+  }
+
+  boolean withinSpread(JsonObject row) {
+    OptionalDouble change = change(row), spread = spread(row);
+    return change.isPresent()
+        && spread.isPresent()
+        && Math.abs(change.getAsDouble()) <= spread.getAsDouble();
+  }
+
+  /** Baseline median for the row, when one matches. */
+  OptionalDouble previous(JsonObject row) {
+    Stats previous = baseline.get(key(row));
+    return previous == null ? OptionalDouble.empty() : OptionalDouble.of(previous.median());
+  }
+
+  /** Whether a positive change means faster for this row's score direction. */
+  static boolean higherIsBetter(JsonObject row) {
+    return "thrpt".equals(row.get("mode").getAsString());
   }
 }

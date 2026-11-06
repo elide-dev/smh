@@ -79,7 +79,8 @@ class BuildPreparationTest {
           compilations.incrementAndGet();
           return Files.writeString(settings.output.resolve("binary"), "compiled");
         };
-    BuildCache.Identity identity = settings -> BuildCache.hash(settings.classpath.getFirst());
+    BuildCache.Identity identity =
+        settings -> BuildCache.Fingerprint.of(BuildCache.hash(settings.classpath.getFirst()));
     BuildPreparation.prepare(c, false);
     c.validate();
     var first = BuildCache.build(c, false, compiler, identity);

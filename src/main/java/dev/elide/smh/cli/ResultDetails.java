@@ -32,6 +32,7 @@ final class ResultDetails {
     StringBuilder result = new StringBuilder();
     if (!finite.isEmpty()) {
       int available = Math.max(36, Math.min(160, width)) - 4;
+      result.append(headline(row, finite, available));
       boolean wide = width >= 110;
       int panel = wide ? (available - 4) / 2 : available;
       List<String> distribution = distribution(finite, panel);
@@ -46,37 +47,15 @@ final class ResultDetails {
         result.append('\n');
       }
       String units =
-          row.has("primaryMetric")
+          row.has("primaryMetric") && row.getAsJsonObject("primaryMetric").has("scoreUnit")
               ? " · " + unit(row.getAsJsonObject("primaryMetric").get("scoreUnit").getAsString())
               : "";
-      String caption = "Iteration score" + units;
+      String caption = "Iteration score" + units + beyond(finite);
       result.append("    ").append(DIM).append(caption);
       if (wide)
         result
             .append(" ".repeat(Math.max(0, panel - caption.length()) + 4))
             .append(finite.size() == samples.size() ? "Iteration index" : "Finite-score index");
-      result.append(RESET).append("\n\n");
-      List<Double> sorted = finite.stream().sorted().toList();
-      double lower = sorted.get((sorted.size() - 1) / 2);
-      double upper = sorted.get(sorted.size() / 2);
-      double sum = lower + upper;
-      double median = Double.isFinite(sum) ? sum / 2 : lower / 2 + upper / 2;
-      int used = 0;
-      for (String statistic :
-          List.of(
-              DIM + "median " + TEXT + number(median),
-              DIM + "p99 " + TEXT + number(quantile(sorted, .99)),
-              DIM
-                  + compactCount(finite.size())
-                  + (finite.size() == 1 ? " iteration" : " iterations"))) {
-        int length = visible(statistic);
-        if (used > 0 && used + 3 + length > available) {
-          result.append(RESET).append('\n');
-          used = 0;
-        }
-        result.append(used == 0 ? "    " : "   ").append(statistic);
-        used += (used == 0 ? 0 : 3) + length;
-      }
       result.append(RESET).append('\n');
     } else {
       result
@@ -97,6 +76,108 @@ final class ResultDetails {
     return result.append(conditions(row)).append('\n').toString();
   }
 
+  /** Relative spread at which the headline flags iteration scores as widely dispersed. */
+  static final double WIDE_SPREAD = .10;
+
+  /**
+   * The answer first: median with its median absolute deviation, then the mean score and range.
+   * These are descriptive statistics of retained iteration scores, not confidence intervals.
+   */
+  static String headline(JsonObject row, List<Double> finite, int available) {
+    List<Double> sorted = finite.stream().sorted().toList();
+    double median = median(sorted);
+    double spread = mad(sorted, median);
+    double mean =
+        row.has("primaryMetric") && row.getAsJsonObject("primaryMetric").has("score")
+            ? row.getAsJsonObject("primaryMetric").get("score").getAsDouble()
+            : finite.stream().mapToDouble(Double::doubleValue).sum() / finite.size();
+    String unit =
+        row.has("primaryMetric") && row.getAsJsonObject("primaryMetric").has("scoreUnit")
+            ? " " + unit(row.getAsJsonObject("primaryMetric").get("scoreUnit").getAsString())
+            : "";
+    // A finite median always has a finite MAD; only a zero median has no relative spread.
+    double relative = Math.abs(median) > 0 ? spread / Math.abs(median) : 0;
+    boolean wide = relative > WIDE_SPREAD;
+    String spreadColor = wide ? GOLD : TEXT;
+    StringBuilder result = new StringBuilder();
+    result.append(
+        line(
+            available,
+            List.of(
+                BOLD + CYAN + number(median) + unit + RESET + DIM + "  median",
+                spreadColor
+                    + "± "
+                    + number(spread)
+                    + unit
+                    + RESET
+                    + DIM
+                    + " spread"
+                    + (Math.abs(median) > 0 ? " (" + number(Math.rint(relative * 100)) + "%)" : ""),
+                DIM + "mean " + TEXT + number(mean) + unit)));
+    result.append(
+        line(
+            available,
+            List.of(
+                DIM + "min " + TEXT + number(sorted.getFirst()),
+                DIM + "p99 " + TEXT + number(quantile(sorted, .99)),
+                DIM
+                    + compactCount(finite.size())
+                    + (finite.size() == 1 ? " iteration" : " iterations"))));
+    if (wide)
+      result.append(
+          line(
+              available,
+              List.of(
+                  GOLD + "wide spread",
+                  GOLD + "half of iterations",
+                  GOLD + "more than " + number(Math.rint(relative * 100)) + "% from median")));
+    return result.append('\n').toString();
+  }
+
+  /** Wraps dot-separated statistics so that no line exceeds the available width. */
+  private static String line(int available, List<String> statistics) {
+    StringBuilder result = new StringBuilder();
+    int used = 0;
+    for (String statistic : statistics) {
+      int length = visible(statistic);
+      if (used > 0 && used + 3 + length > available) {
+        result.append(RESET).append('\n');
+        used = 0;
+      }
+      result.append(used == 0 ? "    " : "   ").append(statistic);
+      used += (used == 0 ? 0 : 3) + length;
+    }
+    return result.append(RESET).append('\n').toString();
+  }
+
+  static double median(List<Double> sorted) {
+    double lower = sorted.get((sorted.size() - 1) / 2);
+    double upper = sorted.get(sorted.size() / 2);
+    double sum = lower + upper;
+    return Double.isFinite(sum) ? sum / 2 : lower / 2 + upper / 2;
+  }
+
+  /** Median absolute deviation around the median; infinite differences saturate the spread. */
+  static double mad(List<Double> sorted, double median) {
+    List<Double> deviations =
+        sorted.stream().map(value -> Math.abs(value - median)).sorted().toList();
+    return median(deviations);
+  }
+
+  /** Scores above the 99th percentile are counted in the caption instead of stretching the axis. */
+  static String beyond(List<Double> finite) {
+    List<Double> sorted = finite.stream().sorted().toList();
+    double limit = quantile(sorted, .99);
+    long count = finite.stream().filter(value -> value > limit).count();
+    return count == 0 ? "" : " · " + count + " beyond p99 not plotted";
+  }
+
+  static List<Double> plotted(List<Double> samples) {
+    List<Double> sorted = samples.stream().sorted().toList();
+    double limit = quantile(sorted, .99);
+    return samples.stream().filter(value -> value <= limit).toList();
+  }
+
   /** Equal-width bins include both endpoints. Constant series occupy the central bin. */
   static int[] histogram(List<Double> samples, int bins) {
     double min = Collections.min(samples), max = Collections.max(samples);
@@ -106,7 +187,8 @@ final class ResultDetails {
     return counts;
   }
 
-  static List<String> distribution(List<Double> samples, int width) {
+  static List<String> distribution(List<Double> all, int width) {
+    List<Double> samples = plotted(all);
     double min = Collections.min(samples), max = Collections.max(samples);
     int labelWidth = Integer.toString(samples.size()).length();
     int columns = (width - labelWidth - 2) / 2;

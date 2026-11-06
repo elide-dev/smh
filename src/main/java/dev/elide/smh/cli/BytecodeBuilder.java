@@ -111,6 +111,14 @@ final class BytecodeBuilder {
     return marker;
   }
 
+  static List<Path> processorPath(BuildConfig c) throws IOException {
+    List<Path> result = new ArrayList<>(List.of(c.home.resolve("smh.jar")));
+    try (var paths = Files.list(c.home.resolve("lib"))) {
+      paths.filter(p -> p.toString().endsWith(".jar")).sorted().forEach(result::add);
+    }
+    return result;
+  }
+
   static List<Path> runtime(BuildConfig c) throws IOException {
     List<Path> result = new ArrayList<>(List.of(c.home.resolve("smh-runtime.jar")));
     try (var paths = Files.list(c.home.resolve("lib"))) {

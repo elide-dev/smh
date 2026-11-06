@@ -156,6 +156,40 @@ class CliTest {
     Path file = Files.writeString(directory.resolve("build.json"), config.toString());
     Output defaults = invoke("build", "--config", file.toString(), "--dry-run");
     assertEquals(0, defaults.status, defaults.stderr);
+    Output flags = invoke("build", "--config", file.toString(), "--print-flags", "-O3");
+    assertEquals(0, flags.status, flags.stderr);
+    assertTrue(flags.stdout.startsWith("--no-fallback\n-O3\n"), flags.stdout);
+    assertTrue(flags.stdout.contains("-DcompilerBlackholesEnabled=true"), flags.stdout);
+    Output contract =
+        invoke("build", "--config", file.toString(), "--print-flags", "json", "--no-layers");
+    assertEquals(0, contract.status, contract.stderr);
+    JsonObject parsed = com.google.gson.JsonParser.parseString(contract.stdout).getAsJsonObject();
+    assertEquals(
+        "dev.elide.smh.processor.BenchmarkProcessor",
+        parsed.getAsJsonObject("javac").get("processor").getAsString());
+    assertEquals(
+        "dev.elide.smh.generated.Main",
+        parsed.getAsJsonObject("nativeImage").get("mainClass").getAsString());
+    assertFalse(parsed.getAsJsonObject("nativeImage").get("layers").getAsBoolean());
+    assertTrue(contract.stdout.contains("smh.jar"));
+    assertNotEquals(
+        0, invoke("build", "--config", file.toString(), "--print-flags", "yaml").status);
+    config.addProperty("observer", "example.Observer");
+    Path observed = Files.writeString(directory.resolve("observed.json"), config.toString());
+    Output pgo =
+        invoke(
+            "build",
+            "--config",
+            observed.toString(),
+            "--print-flags",
+            "json",
+            "--pgo",
+            "use",
+            "--profile",
+            source.toString());
+    assertEquals(0, pgo.status, pgo.stderr);
+    assertTrue(pgo.stdout.contains("--pgo=" + source.toAbsolutePath()), pgo.stdout);
+    assertTrue(pgo.stdout.contains("-Asmh.observer=example.Observer"), pgo.stdout);
     assertEquals(
         TerminalDisplay.path(
             directory.resolve("original").resolve(Platform.current().executable("benchmarks"))),
@@ -296,6 +330,38 @@ class CliTest {
     assertEquals(0, bench.call());
     assertEquals(compiled, calls.get());
     assertEquals(2, Files.readAllLines(executions).size());
+    // An externally built image runs as-is: no preparation of SMH's build, no cache receipt.
+    Path external = directory.resolve(windows ? "external.cmd" : "external");
+    Files.writeString(
+        external,
+        windows
+            ? "@echo off\r\necho external >> \"" + executions + "\"\r\necho []\r\n"
+            : "#!/bin/sh\necho external >> '" + executions + "'\necho '[]'\n");
+    assertTrue(external.toFile().setExecutable(true));
+    Main.Bench own = new Main.Bench();
+    var ownParser = new CommandLine(own);
+    ownParser.parseArgs(
+        "--build-config",
+        config.toString(),
+        "--config",
+        run.toString(),
+        "--binary",
+        external.toString(),
+        "--display",
+        "plain");
+    assertEquals(0, own.call());
+    assertEquals(compiled, calls.get());
+    assertEquals("external", Files.readAllLines(executions).getLast());
+    own.buildConfig = directory.resolve("absent.json");
+    assertEquals(0, own.call(), "the build configuration is optional with --binary");
+    own.rebuild = true;
+    assertThrows(IllegalArgumentException.class, own::call);
+    own.rebuild = false;
+    own.execution = "hotspot";
+    assertThrows(IllegalArgumentException.class, own::call);
+    own.execution = "aot";
+    own.binary = directory.resolve("missing-binary");
+    assertThrows(IllegalArgumentException.class, own::call);
     Path baseline =
         Files.writeString(
             directory.resolve("baseline.json"),
@@ -318,7 +384,8 @@ class CliTest {
         baseline.toString());
     assertEquals(0, bench.call());
     assertTrue(calls.get() > compiled);
-    assertEquals(3, Files.readAllLines(executions).size());
+    // Two external launches above plus this rebuilt run.
+    assertEquals(5, Files.readAllLines(executions).size());
     bench.simulationRunner =
         new CallgrindRunner(
             (command, stdout, stderr) -> {

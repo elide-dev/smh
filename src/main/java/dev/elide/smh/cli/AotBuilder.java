@@ -51,13 +51,7 @@ public class AotBuilder {
             ? null
             : BytecodeBuilder.build(
                 c, dryRun, (command, cwd) -> execute(command, cwd, false, c.verbose));
-    List<String> flags = new ArrayList<>(List.of("--no-fallback", "-O" + c.optimization));
-    // JMH's padding check assumes HotSpot layout. Its compiler-only path does not use
-    // tombstone fields: initialize the flag/check on the builder JVM, never against SVM layout.
-    flags.addAll(AotPolicy.requiredCompilerFlags());
-    if (c.pgo.equals("instrument")) flags.add("--pgo-instrument");
-    if (c.pgo.equals("use")) flags.add("--pgo=" + c.profile);
-    flags.addAll(c.nativeArgs);
+    List<String> flags = flags(c);
     Process versionProbe =
         new ProcessBuilder(append(c.nativeImage, "--version")).redirectErrorStream(true).start();
     String version =
@@ -159,6 +153,49 @@ public class AotBuilder {
           c.output.resolve("build.json"),
           new GsonBuilder().setPrettyPrinting().create().toJson(manifest));
     return binary;
+  }
+
+  /** The native-image options every SMH benchmark image needs, in command order. */
+  static List<String> flags(BuildConfig c) {
+    List<String> flags = new ArrayList<>(List.of("--no-fallback", "-O" + c.optimization));
+    // JMH's padding check assumes HotSpot layout. Its compiler-only path does not use
+    // tombstone fields: initialize the flag/check on the builder JVM, never against SVM layout.
+    flags.addAll(AotPolicy.requiredCompilerFlags());
+    if (c.pgo.equals("instrument")) flags.add("--pgo-instrument");
+    if (c.pgo.equals("use")) flags.add("--pgo=" + c.profile);
+    flags.addAll(c.nativeArgs);
+    return flags;
+  }
+
+  /** The compiler contract for builds that Gradle, Maven, or Bazel own instead of SMH. */
+  static JsonObject contract(BuildConfig c) throws IOException {
+    JsonObject result = new JsonObject();
+    JsonObject javac = new JsonObject();
+    javac.addProperty("processor", "dev.elide.smh.processor.BenchmarkProcessor");
+    JsonArray processorPath = new JsonArray();
+    BytecodeBuilder.processorPath(c).forEach(path -> processorPath.add(path.toString()));
+    javac.add("processorPath", processorPath);
+    JsonArray classpath = new JsonArray();
+    BytecodeBuilder.runtime(c).forEach(path -> classpath.add(path.toString()));
+    javac.add("classpath", classpath);
+    JsonArray options = new JsonArray();
+    for (String option :
+        List.of("--release", "25", "-Asmh.target=" + Platform.current().targetTriple()))
+      options.add(option);
+    if (c.observer != null) options.add("-Asmh.observer=" + c.observer);
+    javac.add("options", options);
+    result.add("javac", javac);
+    JsonObject image = new JsonObject();
+    JsonArray flags = new JsonArray();
+    flags(c).forEach(flags::add);
+    image.add("flags", flags);
+    image.addProperty("mainClass", "dev.elide.smh.generated.Main");
+    image.addProperty("layers", c.layers);
+    image.addProperty("layersNote", "SMH-managed base layers are unavailable to external builds");
+    result.add("nativeImage", image);
+    result.addProperty(
+        "benchHint", "smh bench --binary <image> runs the result without rebuilding");
+    return result;
   }
 
   private static String classpath(List<Path> paths) {

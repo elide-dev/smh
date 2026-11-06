@@ -159,12 +159,16 @@ spinner indicates activity and elapsed time, not a completion percentage. Binari
 built with an older SDK still work but can only display their final report; rebuild
 them to enable completed-case streaming.
 
-Each wall-time result leads with a rounded mean and a histogram of iteration scores.
-The histogram includes every finite score in equal-width bins over the full observed
-range, with numeric count and score axes. The compact caption shows median, p99,
-and iteration count. Percentiles describe **iteration scores**, not individual-operation
-latency or confidence intervals. Terminal output uses µs; raw JSON retains the
-original values and JMH-compatible `us` units.
+Each wall-time result leads with the answer: the **median** iteration score with its
+spread, the mean (the JMH `score`), and the minimum, p99, and iteration count.
+Spread is the median absolute deviation (MAD): half of the iterations lie within
+that distance of the median. A spread above 10% of the median is flagged in amber
+as *wide spread*; it is a description of the retained scores, not a confidence
+interval or a stability verdict. The histogram below it bins every finite score up
+to the 99th percentile; scores beyond p99 are counted in the caption instead of
+stretching the axis, while the run-order chart still shows them. Percentiles
+describe **iteration scores**, not individual-operation latency. Terminal output
+uses µs; raw JSON retains the original values and JMH-compatible `us` units.
 Single-shot cases carry an `[ss]` label. Batches larger than one are shown explicitly;
 the default batch caption is omitted.
 
@@ -216,16 +220,22 @@ smh run build/example/benchmarks --config examples/run.json --compare baseline.j
 The baseline is read before the child starts, so writing a new result cannot change
 the comparison halfway through. Wall-time rows match on benchmark name, mode,
 parameters, and score unit. Each completed case adds a compact row with its current
-mean, signed percentage, and a bar centered on zero. All rows share a ±20% scale;
-an arrow identifies a change beyond that range. Deltas are
-`(new / baseline - 1) × 100`; the direction refers to the row's score, so lower
-elapsed time and higher throughput have opposite signs. Missing matches and zero
-baselines show no percentage.
+median, signed percentage, a bar centered on zero, and a spread band. All rows share
+a ±20% scale; an arrow identifies a change beyond that range. Deltas compare
+**medians** of the retained iteration scores, `(new / baseline - 1) × 100`; rows
+without retained samples fall back to the score. Green means faster and rose means
+slower for the row's score direction, so lower elapsed time and higher throughput
+are both green. The spread band is the sum of both runs' median absolute deviations
+relative to their medians; a change inside it is marked `≈` and dimmed because the
+two runs' iteration spreads overlap it. Missing matches and zero baselines show no
+percentage. After the last case, a `Summary` block states each case's verdict the way
+`hyperfine` does: a speed factor such as `1.65× faster`, both medians, and the band.
 Comparisons require terminal mode (`--display tui` when redirecting stdout).
 
 These are descriptive score changes, not statistical significance or automatic
-regression decisions. Verify compiler/build identity and measurement conditions
-before interpreting them. The raw JSON retains every sample and its original order.
+regression decisions. The spread band is not a confidence interval. Verify
+compiler/build identity and measurement conditions before interpreting them. The
+raw JSON retains every sample and its original order.
 
 `smh simulate` supports the same display modes. Its result leads with instructions
 per operation and shows available memory and branch events on a shared scale. With
@@ -260,12 +270,44 @@ smh bench --rebuild  # force a fresh native artifact
 
 The default filenames are `smh-build.json` and `smh-run.json`. Build entries live in
 `<output>/.smh-cache/`; published artifact directories are immutable. SHA-256 keys
-include source contents, application/classpath dependencies, SDK jars, compiler
-implementations and versions, build options, profile data, platform, and build
-environment (excluding terminal, working-directory, and temporary-directory bookkeeping). Artifact checksums
-are verified before reuse. Changed inputs during compilation prevent publication;
-failed builds never become cache hits. Measurement settings and results are not
-cached: every invocation starts a new benchmark process.
+combine named input digests: source contents, application/classpath dependencies,
+SDK jars, declared cache inputs, profile data, build options, platform, toolchain
+identities, and the build-affecting environment. Artifact checksums are verified
+before reuse. Changed inputs during compilation prevent publication; failed builds
+never become cache hits. Measurement settings and results are not cached: every
+invocation starts a new benchmark process.
+
+Every `smh bench` prints one line with the cache outcome and the time it took:
+
+```text
+  Cache hit · b73d195d0cda · build inputs unchanged · 1.8 s
+  Built · be835e25d82f · changed: env:CFLAGS, sources · 53.3 s
+```
+
+A miss names the inputs whose digests differ from the most recent receipt in the
+same cache, so an unexpected rebuild is explained rather than silent. The eight most
+recent receipts and their artifact directories are retained per cache; older
+generations are deleted after a successful publication.
+
+Only environment variables that can change compiler or linker output are part of
+the key: `JAVA_HOME`, `GRAALVM_HOME`, `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`,
+`_JAVA_OPTIONS`, `CC`, `CXX`, `LD`, `AR`, `CFLAGS`, `CXXFLAGS`, `CPPFLAGS`,
+`LDFLAGS`, the `*LIBRARY_PATH` and `*INCLUDE_PATH`/`CPATH` search variables, and
+`USE_NATIVE_IMAGE_JAVA_PLATFORM_MODULE_SYSTEM`. Session bookkeeping such as
+`TMPDIR`, `WSL_INTEROP`, shell prompt state, or editor variables never invalidates a
+build. Declare other names your toolchain reads in the build JSON:
+
+```json
+{
+  "cacheEnvironment": ["MY_NATIVE_FLAGS"]
+}
+```
+
+Toolchains are identified by their launcher bytes, `--version` output, a JDK
+`release` file or Elide `conf` directory, and a path/size/timestamp manifest of
+their `lib` tree. Library bytes are not read on every run: a same-size,
+same-timestamp edit inside an installed toolchain is not detected, and reinstalling
+a toolchain is a deliberate rebuild.
 
 Declare external files referenced by native compiler options in the build JSON's
 `"cacheInputs": ["path/to/native-library", "path/to/config"]`. Paths resolve relative
@@ -304,6 +346,57 @@ to construct the build plan must still be available.
 The nested sample configures `elide run assemble`, so both `smh bench` and
 `elide run bench` build the application on demand and package a deterministic JAR.
 See its [guide](../examples/invoice-app/README.md).
+
+## Bring your own build: Gradle, Maven, and Bazel
+
+Projects that already own a native build do not need SMH to run `javac` or
+`native-image`. The contract has two halves, and `smh build --print-flags`
+prints both so a build script can copy them rather than hard-code them:
+
+```sh
+smh build --config smh-build.json --print-flags        # native-image flags, one per line
+smh build --config smh-build.json --print-flags json   # javac and native-image settings
+```
+
+1. **Compile the benchmarks with SMH's annotation processor.** Put the SDK's
+   `smh.jar` and `lib/*.jar` on the processor path, `smh-runtime.jar` plus the
+   SDK's `gson`, `jmh-core`, `nativeimage`, and `word` jars on the compile
+   classpath, and pass `-processor dev.elide.smh.processor.BenchmarkProcessor`
+   with `--release 25` and `-Asmh.target=<host triple>`. The JSON contract lists
+   the exact paths and options for the configured SDK.
+2. **Build the image with the printed flags.** They are `--no-fallback`, the
+   optimization level, the blackhole and inlining settings the measurement
+   contract depends on, PGO options, and the configured `nativeArgs`. The image's
+   main class is `dev.elide.smh.generated.Main`, and its classpath is the runtime
+   jars, your application classpath, and the compiled benchmark classes. SMH's
+   managed base layers are not available to external builds; set `layers` to
+   `false` in the configuration you print from.
+
+Then run the image through the normal benchmark, startup, soak, and comparison
+paths without rebuilding:
+
+```sh
+smh bench --binary build/native/nativeCompile/benchmarks --config smh-run.json
+```
+
+`--binary` skips the cache and SMH's compilers entirely. A build configuration is
+optional; when present, only its `prepare` command runs first, which is how a
+Gradle, Maven, or Bazel target can be invoked before every measurement:
+
+```json
+{
+  "prepare": ["./gradlew", "nativeCompile"],
+  "sources": ["benchmarks"]
+}
+```
+
+Every result row records `smh.execution.provenance`: `smh-build` when SMH's
+`build.json` manifest sits beside the image, otherwise `external`. External
+images are labeled *build provenance unverified* in the terminal footer because
+SMH cannot confirm the compiler, options, or profile that produced them; keep
+that identity with the results yourself. `--rebuild` and non-AOT `--execution`
+values are rejected together with `--binary`. The dedicated Gradle, Maven, and
+Bazel plugins are planned on top of this contract and are not yet available.
 
 See [Experiment modes](EXPERIMENTS.md) for fresh-process startup boundaries,
 full-budget soak, and the different wall-time and simulated-work axes.

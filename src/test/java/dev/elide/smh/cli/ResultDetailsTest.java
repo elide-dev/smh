@@ -58,9 +58,14 @@ class ResultDetailsTest {
       assertEquals(1, histogram[bins - 1]);
     }
     String result = plain(ResultDetails.render(row(), samples, 80));
-    assertTrue(result.lines().anyMatch(line -> line.endsWith("▁▁")), result);
+    assertTrue(result.contains("1 beyond p99 not plotted"), result);
     assertTrue(result.contains("1000 │"), result);
     assertTrue(result.contains("1k iterations"), result);
+    assertTrue(result.contains("1 µs/op  median"), result);
+    assertTrue(result.contains("± 0 µs/op spread (0%)"), result);
+    assertFalse(result.contains("wide spread"), result);
+    assertEquals(1000, ResultDetails.plotted(samples).size());
+    assertEquals("", ResultDetails.beyond(List.of(1.0, 2.0)));
   }
 
   @Test
@@ -73,12 +78,18 @@ class ResultDetailsTest {
     assertTrue(result.contains("Iteration score · µs/op"));
     assertTrue(result.contains("4 │"));
     assertTrue(result.contains("0 └"));
-    assertTrue(result.contains("median 16"));
+    assertTrue(result.contains("16 µs/op  median"), result);
+    assertTrue(result.contains("± 0.5 µs/op spread (3%)"), result);
+    assertTrue(result.contains("mean 16.5 µs/op"), result);
+    assertTrue(result.contains("min 15"), result);
     assertTrue(result.contains("p99 19"));
     assertTrue(result.contains("8 iterations"));
     assertTrue(result.contains("██"));
-    assertEquals(2, result.lines().toList().get(1).chars().filter(c -> c == '█').count());
-    assertEquals(8, result.lines().toList().get(4).chars().filter(c -> c == '█').count());
+    assertEquals(2, result.lines().toList().get(4).chars().filter(c -> c == '█').count());
+    assertEquals(8, result.lines().toList().get(7).chars().filter(c -> c == '█').count());
+    JsonObject scored = row();
+    scored.getAsJsonObject("primaryMetric").addProperty("score", 17.25);
+    assertTrue(plain(ResultDetails.render(scored, samples)).contains("mean 17.3 µs/op"));
     assertFalse(result.contains("Run order"));
     assertFalse(result.contains("CV"));
     assertFalse(result.contains("reference"));
@@ -98,12 +109,13 @@ class ResultDetailsTest {
       String result = plain(colored);
       assertTrue(colored.contains(TerminalDisplay.VIOLET));
       var lines = result.lines().toList();
-      int column = lines.getFirst().indexOf("Run order");
+      int column = lines.get(3).indexOf("Run order");
       assertTrue(column > 0);
-      assertTrue(lines.getFirst().contains("min–max per column"));
+      assertTrue(lines.get(3).contains("min–max per column"));
       assertTrue(result.contains("Iteration index"));
-      assertTrue(lines.get(1).substring(column).contains("┃"), result);
-      assertTrue(lines.get(4).substring(column).contains("●"), result);
+      assertTrue(lines.get(4).substring(column).contains("┃"), result);
+      assertTrue(lines.get(7).substring(column).contains("●"), result);
+      assertTrue(result.contains("1 beyond p99 not plotted"), result);
       assertTrue(result.contains("1000"));
     }
   }
@@ -131,13 +143,16 @@ class ResultDetailsTest {
     assertTrue(adjacent.contains("1.0000000000000002"));
     String midpoint =
         plain(ResultDetails.render(row(), List.of(-Double.MAX_VALUE, Double.MAX_VALUE)));
-    assertTrue(midpoint.contains("median 0"));
+    assertTrue(midpoint.contains("0 µs/op  median"), midpoint);
     String tinyMedian =
         plain(ResultDetails.render(row(), List.of(Double.MIN_VALUE, 2 * Double.MIN_VALUE)));
-    assertTrue(tinyMedian.contains("median 9.9e−324"));
+    assertTrue(tinyMedian.contains("9.9e−324 µs/op  median"), tinyMedian);
     String hugeMedian =
         plain(ResultDetails.render(row(), List.of(Double.MAX_VALUE, Double.MAX_VALUE)));
-    assertTrue(hugeMedian.contains("median 1.8e+308"));
+    assertTrue(hugeMedian.contains("1.8e+308 µs/op  median"), hugeMedian);
+    assertTrue(plain(ResultDetails.render(new JsonObject(), List.of(2.0))).contains("2  median"));
+    JsonObject unitless = JsonParser.parseString("{\"primaryMetric\":{}}").getAsJsonObject();
+    assertTrue(plain(ResultDetails.render(unitless, List.of(2.0))).contains("2  median"));
     assertTrue(plain(ResultDetails.render(new JsonObject(), List.of(2.0))).contains("1 iteration"));
     assertTrue(
         plain(ResultDetails.render(row(), List.of(16.3, 18.9), 10)).contains("Iteration score"));
@@ -173,7 +188,11 @@ class ResultDetailsTest {
     String result = plain(ResultDetails.render(row, List.of(1.0, 3.0)));
     assertTrue(result.contains("warmup · budget exhausted"));
     assertTrue(result.contains("measurement · sample limit"));
-    assertTrue(result.contains("median 2"));
+    assertTrue(result.contains("2 µs/op  median"), result);
+    assertTrue(result.contains("wide spread"), result);
+    assertTrue(result.contains("more than 50% from median"), result);
+    assertTrue(
+        ResultDetails.render(row, List.of(1.0, 3.0)).contains(TerminalDisplay.GOLD + "wide"));
     assertFalse(result.contains("stable"));
     assertTrue(ResultDetails.conditions(row).contains(TerminalDisplay.GOLD));
     for (String phase :

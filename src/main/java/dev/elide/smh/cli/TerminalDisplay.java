@@ -448,7 +448,9 @@ final class TerminalDisplay {
       StringBuilder table = new StringBuilder();
       if (comparison != null && heading && !rows.isEmpty()) table.append(comparisonHeading(width));
       for (List<JsonObject> group : VariantCharts.groups(rows)) {
-        if (comparison == null && group.size() > 1) {
+        // Shared axes suit same-workload launch comparisons; parameterized steady-state cases
+        // are different workloads and each gets its own card.
+        if (comparison == null && group.size() > 1 && VariantCharts.overlay(group)) {
           table.append(VariantCharts.render(group, width));
           continue;
         }
@@ -470,6 +472,13 @@ final class TerminalDisplay {
             } else table.append(ResultDetails.conditions(row));
             continue;
           }
+          boolean steady =
+              !row.has("smh")
+                  || !row.getAsJsonObject("smh").has("experimentMode")
+                  || row.getAsJsonObject("smh")
+                      .get("experimentMode")
+                      .getAsString()
+                      .equals("steady");
           table
               .append("\n  ")
               .append(TEXT)
@@ -479,17 +488,21 @@ final class TerminalDisplay {
               .append(EDGE)
               .append("─".repeat(width - 4))
               .append(RESET)
-              .append("\n\n    ")
-              .append(BOLD)
-              .append(CYAN)
-              .append(ResultDetails.number(metric.get("score").getAsDouble()))
-              .append(' ')
-              .append(ResultDetails.unit(metric.get("scoreUnit").getAsString()))
-              .append(RESET)
-              .append(DIM)
-              .append("  mean")
-              .append(RESET)
               .append("\n\n");
+          // Steady-state cards lead with the median headline; experiment cards keep the mean.
+          if (!steady)
+            table
+                .append("    ")
+                .append(BOLD)
+                .append(CYAN)
+                .append(ResultDetails.number(metric.get("score").getAsDouble()))
+                .append(' ')
+                .append(ResultDetails.unit(metric.get("scoreUnit").getAsString()))
+                .append(RESET)
+                .append(DIM)
+                .append("  mean")
+                .append(RESET)
+                .append("\n\n");
           List<Double> samples = new ArrayList<>();
           for (JsonElement fork : metric.getAsJsonArray("rawData"))
             for (JsonElement value : fork.getAsJsonArray()) samples.add(value.getAsDouble());
@@ -525,33 +538,37 @@ final class TerminalDisplay {
     if (packageEnd >= 0) name = name.substring(packageEnd + 1);
     if ("ss".equals(row.get("mode").getAsString())) name += " [ss]";
     String params =
-        row.getAsJsonObject("params").entrySet().stream()
-            .map(e -> clean(e.getKey() + "=" + e.getValue().getAsString()))
-            .collect(java.util.stream.Collectors.joining(" · "));
+        (row.has("params") ? row.getAsJsonObject("params") : new JsonObject())
+            .entrySet().stream()
+                .map(e -> clean(e.getKey() + "=" + e.getValue().getAsString()))
+                .collect(java.util.stream.Collectors.joining(" · "));
     if (params.isEmpty()) return fit(name, limit);
     if (name.length() + params.length() + 3 <= limit) return name + " · " + params;
+    if (limit < 12) return fit(name + " · " + params, limit);
     int nameWidth = Math.min(name.length(), Math.max(8, limit * 2 / 3));
     return fit(name, nameWidth) + " · " + fit(params, limit - nameWidth - 3);
   }
 
   static String fit(String value, int limit) {
+    if (limit <= 1) return value.isEmpty() ? "" : "…";
     return value.length() <= limit ? value : "…" + value.substring(value.length() - limit + 1);
   }
 
   static String comparisonHeading(int width) {
     String columns =
-        width < 64
+        width < 72
             ? "Change scale −20% ───── 0 ───── +20%"
             : String.format(
                 Locale.ROOT,
-                "%-" + Math.min(44, width - 52) + "s  %13s  %s  %7s",
+                "%-" + Math.min(44, width - 58) + "s  %13s  %s  %7s  %6s",
                 "Benchmark",
-                "Mean",
+                "Median",
                 "−20%      0      +20%",
-                "Change");
+                "Change",
+                "Spread");
     return "\n  "
         + TEXT
-        + "Mean · observed change vs baseline"
+        + "Median · observed change vs baseline"
         + RESET
         + "\n  "
         + DIM
@@ -566,18 +583,26 @@ final class TerminalDisplay {
 
   static String comparisonRow(JsonObject row, BenchmarkComparison comparison, int width) {
     JsonObject metric = row.getAsJsonObject("primaryMetric");
+    BenchmarkComparison.Stats stats = BenchmarkComparison.stats(row);
     String score =
-        ResultDetails.number(metric.get("score").getAsDouble())
+        ResultDetails.number(stats.median())
             + " "
             + ResultDetails.unit(metric.get("scoreUnit").getAsString());
     OptionalDouble change = comparison.change(row);
+    OptionalDouble spread = comparison.spread(row);
+    boolean within = comparison.withinSpread(row);
     String plot =
         change.isPresent()
             ? changeBar(change.getAsDouble())
             : DIM + "       no delta      " + RESET;
     String delta = change.isPresent() ? percent(change.getAsDouble()) : "—";
-    String name = label(row, width < 64 ? width - 4 : Math.min(44, width - 52));
-    if (width < 64)
+    String band =
+        spread.isPresent()
+            ? (within ? "≈ " : "± ") + percent(spread.getAsDouble()).replace("+", "")
+            : "";
+    String color = deltaColor(change, row.get("mode").getAsString(), within);
+    String name = label(row, width < 72 ? width - 4 : Math.min(44, width - 58));
+    if (width < 72)
       return "  "
           + TEXT
           + fit(name, width - 4)
@@ -589,14 +614,18 @@ final class TerminalDisplay {
           + "\n    "
           + plot
           + "  "
-          + deltaColor(change, row.get("mode").getAsString())
+          + color
           + delta
           + RESET
+          + "  "
+          + DIM
+          + band
+          + RESET
           + "\n";
-    int labelWidth = Math.min(44, width - 52);
+    int labelWidth = Math.min(44, width - 58);
     return String.format(
         Locale.ROOT,
-        "  %s%-" + labelWidth + "s%s  %s%13s%s  %s  %s%7s%s%n",
+        "  %s%-" + labelWidth + "s%s  %s%13s%s  %s  %s%7s%s  %s%6s%s%n",
         TEXT,
         fit(name, labelWidth),
         RESET,
@@ -604,8 +633,11 @@ final class TerminalDisplay {
         score,
         RESET,
         plot,
-        deltaColor(change, row.get("mode").getAsString()),
+        color,
         delta,
+        RESET,
+        DIM,
+        band,
         RESET);
   }
 
@@ -641,6 +673,8 @@ final class TerminalDisplay {
             && execution.has("purpose")
             && !execution.get("purpose").getAsString().equals("measurement"))
           qualifications.add(clean(execution.get("purpose").getAsString()) + " run");
+        if (execution != null && new JsonPrimitive("external").equals(execution.get("provenance")))
+          qualifications.add("external binary · build provenance unverified");
         if (execution != null && new JsonPrimitive("jmh").equals(execution.get("harness"))) {
           engine = "JMH " + JmhBuilder.VERSION + " · " + engine;
           if (execution.has("aotCacheKey")) engine += "Leyden · ";
@@ -655,6 +689,7 @@ final class TerminalDisplay {
         if (row.has("mode")) modes.add(row.get("mode").getAsString());
       }
       if (comparison != null) {
+        err.print(summaryBlock(JsonParser.parseString(json).getAsJsonArray(), comparison));
         err.println("  " + DIM + "Baseline · " + clean(comparison.description()) + RESET);
         String quantity =
             modes.equals(Set.of("thrpt"))
@@ -669,7 +704,12 @@ final class TerminalDisplay {
                 + quantity
                 + " · + more "
                 + quantity
-                + " · arrows exceed ±20%"
+                + " · ≈ change within spread · arrows exceed ±20%"
+                + RESET);
+        err.println(
+            "  "
+                + DIM
+                + "Spread · both runs' median absolute deviations relative to their medians"
                 + RESET);
         err.println("  " + DIM + "Significance not assessed · host/build/batch unchecked" + RESET);
       }
@@ -682,8 +722,69 @@ final class TerminalDisplay {
   }
 
   static String deltaColor(OptionalDouble change, String mode) {
-    if (change.isEmpty() || change.getAsDouble() == 0) return DIM;
-    return change.getAsDouble() < 0 ? CYAN : VIOLET;
+    return deltaColor(change, mode, false);
+  }
+
+  /** Green is faster and rose is slower for the row's score direction; dim is no evidence. */
+  static String deltaColor(OptionalDouble change, String mode, boolean withinSpread) {
+    if (change.isEmpty() || change.getAsDouble() == 0 || withinSpread) return DIM;
+    boolean faster = "thrpt".equals(mode) == change.getAsDouble() > 0;
+    return faster ? GREEN : ROSE;
+  }
+
+  /** One verdict per case, hyperfine style: a speed factor, the medians, and the spread band. */
+  static String summaryBlock(JsonArray rows, BenchmarkComparison comparison) {
+    StringBuilder out = new StringBuilder("  " + TEXT + "Summary · vs baseline" + RESET + "\n");
+    int labelWidth = 0;
+    List<String> labels = new ArrayList<>();
+    for (JsonElement element : rows) {
+      String name = label(element.getAsJsonObject(), 44);
+      labels.add(name);
+      labelWidth = Math.max(labelWidth, name.length());
+    }
+    for (int i = 0; i < rows.size(); i++) {
+      JsonObject row = rows.get(i).getAsJsonObject();
+      OptionalDouble previous = comparison.previous(row);
+      String unit =
+          ResultDetails.unit(row.getAsJsonObject("primaryMetric").get("scoreUnit").getAsString());
+      out.append("    ")
+          .append(TEXT)
+          .append(String.format(Locale.ROOT, "%-" + labelWidth + "s", labels.get(i)))
+          .append(RESET)
+          .append("  ");
+      double current = BenchmarkComparison.stats(row).median();
+      if (previous.isEmpty() || previous.getAsDouble() == 0 || current == 0) {
+        out.append(DIM).append("no baseline match").append(RESET).append('\n');
+        continue;
+      }
+      boolean higher = BenchmarkComparison.higherIsBetter(row);
+      double ratio = higher ? current / previous.getAsDouble() : previous.getAsDouble() / current;
+      boolean within = comparison.withinSpread(row);
+      String verdict;
+      if (!Double.isFinite(ratio)) verdict = "—";
+      else if (within) verdict = "about the same";
+      else if (ratio >= 1) verdict = ResultDetails.number(ratio) + "× faster";
+      else verdict = ResultDetails.number(1 / ratio) + "× slower";
+      String color = within || !Double.isFinite(ratio) ? DIM : ratio >= 1 ? GREEN : ROSE;
+      out.append(color)
+          .append(String.format(Locale.ROOT, "%-15s", verdict))
+          .append(RESET)
+          .append(DIM)
+          .append(ResultDetails.number(current))
+          .append(" vs ")
+          .append(ResultDetails.number(previous.getAsDouble()))
+          .append(' ')
+          .append(unit);
+      OptionalDouble spread = comparison.spread(row);
+      if (spread.isPresent())
+        out.append(" · ")
+            .append(within ? "within " : "")
+            .append("spread ±")
+            .append(ResultDetails.number(Math.rint(spread.getAsDouble())))
+            .append('%');
+      out.append(RESET).append('\n');
+    }
+    return out.append('\n').toString();
   }
 
   static String sparkline(List<Double> samples) {

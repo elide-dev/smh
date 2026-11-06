@@ -40,8 +40,10 @@ application and packages a deterministic JAR. SMH hashes build inputs and verifi
 cached artifacts before reuse. Missing or changed application outputs are rebuilt
 before measurement; unchanged bytes preserve the benchmark cache. Every invocation
 runs fresh measurements. Use `smh bench --rebuild` to force benchmark compilation.
-Preparation output, full compiler logs, and cache decisions are saved in the
-printed log locations. Use `--verbose` to replay build diagnostics before the
+One line reports the cache outcome, for example `Cache hit · … · build inputs
+unchanged · 1.8 s` or `Built · … · changed: env:CFLAGS · 53 s`; a new shell session
+or unrelated environment variable never forces a rebuild. Preparation output, full
+compiler logs, and cache decisions are saved in the printed log locations. Use `--verbose` to replay build diagnostics before the
 benchmark report. A failed preparation stops the run before measurement.
 
 Each input size gets **100 warmup iterations and 1,000 measured iterations**, with
@@ -49,9 +51,9 @@ a 1 ms target per iteration. These are iteration scores, not 1,000 individual
 invocations; each iteration can execute many operations. Runtime overhead can make
 the total longer than the nominal 1.1 seconds per case.
 
-Each case renders as soon as it completes: a prominent mean, a nearby duration
-ruler (or relative baseline bars), and aligned median, p99, and variation.
-Microseconds display as µs. VM/JDK details appear once at the end, and log/report
+Each case renders as soon as it completes: the median with its spread, the mean,
+min/p99/iteration count, then a histogram bounded at p99 (or relative baseline bars
+with a spread band and a summary verdict). Microseconds display as µs. VM/JDK details appear once at the end, and log/report
 paths are relative to this project. Unassessed phases are omitted; non-success
 stopping reasons remain visible. Full phase metadata remains in JSON.
 There are no warmup sparklines or inferred JIT curves.

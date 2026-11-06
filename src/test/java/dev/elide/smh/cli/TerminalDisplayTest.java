@@ -61,12 +61,13 @@ class TerminalDisplayTest {
     assertEquals(
         TerminalDisplay.deltaColor(OptionalDouble.empty(), "avgt"),
         TerminalDisplay.deltaColor(OptionalDouble.of(0), "avgt"));
+    // Direction follows the score: less time and more throughput are both faster (green).
+    assertEquals(TerminalDisplay.GREEN, TerminalDisplay.deltaColor(OptionalDouble.of(-10), "avgt"));
+    assertEquals(TerminalDisplay.GREEN, TerminalDisplay.deltaColor(OptionalDouble.of(10), "thrpt"));
+    assertEquals(TerminalDisplay.ROSE, TerminalDisplay.deltaColor(OptionalDouble.of(10), "avgt"));
+    assertEquals(TerminalDisplay.ROSE, TerminalDisplay.deltaColor(OptionalDouble.of(-10), "thrpt"));
     assertEquals(
-        TerminalDisplay.deltaColor(OptionalDouble.of(-10), "avgt"),
-        TerminalDisplay.deltaColor(OptionalDouble.of(-10), "thrpt"));
-    assertEquals(
-        TerminalDisplay.deltaColor(OptionalDouble.of(10), "avgt"),
-        TerminalDisplay.deltaColor(OptionalDouble.of(10), "thrpt"));
+        TerminalDisplay.DIM, TerminalDisplay.deltaColor(OptionalDouble.of(-10), "avgt", true));
     assertNotEquals(
         TerminalDisplay.deltaColor(OptionalDouble.of(-10), "avgt"),
         TerminalDisplay.deltaColor(OptionalDouble.of(10), "avgt"));
@@ -77,10 +78,72 @@ class TerminalDisplayTest {
     var current = BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(125));
     var stderr = new ByteArrayOutputStream();
     TerminalDisplay.summary(current.toString(), new PrintStream(stderr), baseline);
-    assertTrue(stderr.toString().contains("+25%"));
+    String text = plain(stderr.toString());
+    assertTrue(text.contains("+25%"), text);
+    assertTrue(text.contains("± 20%"), text);
+    assertTrue(text.contains("Summary · vs baseline"), text);
+    assertTrue(text.contains("1.25× slower"), text);
+    assertTrue(text.contains("125 vs 100 µs/op · spread ±20%"), text);
+    assertTrue(stderr.toString().contains(TerminalDisplay.ROSE + "1.25× slower"));
+    stderr.reset();
+    TerminalDisplay.summary(
+        BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(60)).toString(),
+        new PrintStream(stderr),
+        baseline);
+    text = plain(stderr.toString());
+    assertTrue(text.contains("−40%"), text);
+    assertTrue(text.contains("1.67× faster"), text);
+    assertTrue(stderr.toString().contains(TerminalDisplay.GREEN + "1.67× faster"));
+    stderr.reset();
+    TerminalDisplay.summary(
+        BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(104)).toString(),
+        new PrintStream(stderr),
+        baseline);
+    text = plain(stderr.toString());
+    assertTrue(text.contains("≈ 20%"), text);
+    assertTrue(text.contains("about the same"), text);
+    assertTrue(text.contains("within spread ±20%"), text);
+    var throughput = BenchmarkComparisonTest.row(100);
+    throughput.addProperty("mode", "thrpt");
+    var throughputBaseline = new BenchmarkComparison(BenchmarkComparisonTest.rows(throughput));
+    stderr.reset();
+    TerminalDisplay.summary(
+        BenchmarkComparisonTest.rows(BenchmarkComparisonTest.rescore(throughput, 200)).toString(),
+        new PrintStream(stderr),
+        throughputBaseline);
+    assertTrue(plain(stderr.toString()).contains("2× faster"), stderr.toString());
+    stderr.reset();
     current.get(0).getAsJsonObject().addProperty("benchmark", "unmatched");
     TerminalDisplay.summary(current.toString(), new PrintStream(stderr), baseline);
     assertTrue(stderr.toString().contains("no delta"));
+    assertTrue(stderr.toString().contains("no baseline match"));
+    // Zero medians on either side, infinite ratios, and rows without samples stay explicit.
+    var zeroBaseline =
+        new BenchmarkComparison(BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(0)));
+    assertTrue(
+        plain(
+                TerminalDisplay.summaryBlock(
+                    BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(5)), zeroBaseline))
+            .contains("no baseline match"));
+    assertTrue(
+        plain(
+                TerminalDisplay.summaryBlock(
+                    BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(0)), baseline))
+            .contains("no baseline match"));
+    var huge =
+        new BenchmarkComparison(
+            BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(Double.MAX_VALUE)));
+    String infinite =
+        plain(
+            TerminalDisplay.summaryBlock(
+                BenchmarkComparisonTest.rows(BenchmarkComparisonTest.row(Double.MIN_VALUE)), huge));
+    assertTrue(infinite.contains("—"), infinite);
+    var scoreOnly = BenchmarkComparisonTest.row(150);
+    scoreOnly.getAsJsonObject("primaryMetric").remove("rawData");
+    String noSpread =
+        plain(TerminalDisplay.summaryBlock(BenchmarkComparisonTest.rows(scoreOnly), baseline));
+    assertTrue(noSpread.contains("1.5× slower"), noSpread);
+    assertFalse(noSpread.contains("spread"), noSpread);
     assertThrows(
         IllegalArgumentException.class,
         () ->
@@ -118,10 +181,11 @@ class TerminalDisplayTest {
     row.addProperty("measurementBatchSize", 64);
     row.getAsJsonObject("smh").addProperty("accuracy", "unqualified");
     var baseline = new BenchmarkComparison(BenchmarkComparisonTest.rows(row));
-    row.getAsJsonObject("primaryMetric").addProperty("score", 112);
+    BenchmarkComparisonTest.rescore(row, 112);
     for (int width : new int[] {40, 64, 80, 140}) {
       String rendered = plain(TerminalDisplay.comparisonRow(row, baseline, width));
-      assertTrue(rendered.contains("+12%"));
+      assertTrue(rendered.contains("+12%"), rendered);
+      assertTrue(rendered.contains("≈ 20%"), rendered);
       assertTrue(rendered.lines().allMatch(line -> line.length() <= width), rendered);
     }
     var bytes = new ByteArrayOutputStream();
@@ -142,6 +206,51 @@ class TerminalDisplayTest {
     bytes.reset();
     TerminalDisplay.cards("[]", new PrintStream(bytes), baseline);
     assertEquals("", bytes.toString());
+    // Parameterized steady-state cases are separate cards, never one shared-axis overlay.
+    var small = BenchmarkComparisonTest.row(100);
+    var large = BenchmarkComparisonTest.rescore(BenchmarkComparisonTest.row(100), 5000);
+    large.getAsJsonObject("params").addProperty("size", "1000");
+    var steady = BenchmarkComparisonTest.rows(small);
+    steady.add(large);
+    var plainSmh = BenchmarkComparisonTest.row(100);
+    plainSmh.add("smh", new com.google.gson.JsonObject());
+    plainSmh.getAsJsonObject("params").addProperty("size", "plain");
+    steady.add(plainSmh);
+    var noSmh = BenchmarkComparisonTest.row(100);
+    noSmh.remove("smh");
+    noSmh.getAsJsonObject("params").addProperty("size", "foreign");
+    steady.add(noSmh);
+    bytes.reset();
+    TerminalDisplay.summary(steady.toString(), new PrintStream(bytes), null, 80);
+    String separate = plain(bytes.toString());
+    assertFalse(separate.contains("shared bins"), separate);
+    assertEquals(4, separate.split("  median", -1).length - 1, separate);
+    bytes.reset();
+    TerminalDisplay.summary(
+        BenchmarkComparisonTest.rows(VariantChartsTest.row("10", 1, 2, 3)).toString(),
+        new PrintStream(bytes),
+        null,
+        80);
+    String launch = plain(bytes.toString());
+    assertTrue(launch.contains("  mean"), launch);
+    assertFalse(launch.contains("ms/launch  median"), launch);
+    assertTrue(separate.contains("5000 µs/op  median"), separate);
+    bytes.reset();
+    TerminalDisplay.summary(
+        BenchmarkComparisonTest.rows(ExperimentVisualsTest.row(true, false)).toString(),
+        new PrintStream(bytes),
+        null,
+        80);
+    assertTrue(plain(bytes.toString()).contains("  mean"), bytes.toString());
+    var external = BenchmarkComparisonTest.row(100);
+    var execution = new com.google.gson.JsonObject();
+    execution.addProperty("backend", "aot");
+    execution.addProperty("provenance", "external");
+    external.getAsJsonObject("smh").add("execution", execution);
+    bytes.reset();
+    TerminalDisplay.footer(
+        BenchmarkComparisonTest.rows(external).toString(), new PrintStream(bytes), null);
+    assertTrue(plain(bytes.toString()).contains("external binary · build provenance unverified"));
   }
 
   private static String plain(String text) {
@@ -153,6 +262,12 @@ class TerminalDisplayTest {
     var row = BenchmarkComparisonTest.row(100);
     row.getAsJsonObject("params").addProperty("payload", "a".repeat(100));
     assertTrue(TerminalDisplay.label(row, 28).contains("Invoice.total"));
+    var unparameterized = row.deepCopy();
+    unparameterized.remove("params");
+    assertEquals("Invoice.total", TerminalDisplay.label(unparameterized, 28));
+    assertEquals(6, TerminalDisplay.label(row, 6).length());
+    assertEquals("…", TerminalDisplay.fit("abc", 1));
+    assertEquals("", TerminalDisplay.fit("", 0));
     row.addProperty("mode", "ss");
     assertTrue(TerminalDisplay.label(row, 28).contains("[ss]"));
     row.addProperty("benchmark", "bareName");

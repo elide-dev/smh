@@ -33,6 +33,15 @@ class VariantChartsTest {
     rows.add(row("10", 1, 1, 2, 3));
     rows.add(row("1000", 1, 2, 8));
     assertEquals(1, VariantCharts.groups(rows).size());
+    assertTrue(VariantCharts.overlay(VariantCharts.groups(rows).getFirst()));
+    JsonObject soak = rows.get(0).getAsJsonObject().deepCopy();
+    soak.getAsJsonObject("smh").addProperty("experimentMode", "soak");
+    assertFalse(VariantCharts.overlay(List.of(soak)));
+    JsonObject bare = soak.deepCopy();
+    bare.getAsJsonObject("smh").remove("experimentMode");
+    assertFalse(VariantCharts.overlay(List.of(bare)));
+    bare.remove("smh");
+    assertFalse(VariantCharts.overlay(List.of(bare)));
     for (int width : List.of(40, 58, 100, 140)) {
       String view = VariantCharts.render(VariantCharts.groups(rows).getFirst(), width);
       assertTrue(view.contains("◇"));

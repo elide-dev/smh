@@ -41,6 +41,7 @@ JSON `javaHome` and CLI `--java-home`.
 | `nativeArgs` | Compiler options for memory, parallelism, CPU target, GC, and diagnostics. |
 | `observer` | Observer implementation class compiled into the benchmark. |
 | `cacheInputs` | Extra files/directories referenced by native options, hashed by `smh bench`. |
+| `cacheEnvironment` | Additional environment variable names whose values take part in the `smh bench` cache key. |
 
 Preview the compiler commands:
 

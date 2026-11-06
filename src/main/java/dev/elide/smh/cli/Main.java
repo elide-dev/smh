@@ -198,10 +198,37 @@ public class Main implements Callable<Integer> {
         description = "Prepare cached benchmark bytecode without native compilation")
     boolean bytecodeOnly;
 
+    @Option(
+        names = "--print-flags",
+        arity = "0..1",
+        fallbackValue = "text",
+        description =
+            "Print the compiler contract for an external build instead of building: text"
+                + " (native-image flags, one per line) or json (javac and native-image settings)")
+    String printFlags;
+
     @Override
     public Integer call() throws Exception {
       BuildConfig c = BuildConfig.read(config, home);
       c.verbose = verbose;
+      if (printFlags != null) {
+        if (optimization != null) c.optimization = optimization;
+        if (pgo != null) c.pgo = pgo;
+        if (profile != null) c.profile = profile.toAbsolutePath();
+        if (noLayers) c.layers = false;
+        switch (printFlags) {
+          case "text" -> AotBuilder.flags(c).forEach(System.out::println);
+          case "json" ->
+              System.out.println(
+                  new com.google.gson.GsonBuilder()
+                      .setPrettyPrinting()
+                      .disableHtmlEscaping()
+                      .create()
+                      .toJson(AotBuilder.contract(c)));
+          default -> throw new IllegalArgumentException("--print-flags accepts text or json");
+        }
+        return 0;
+      }
       if (javaHome != null) c.javaHome = javaHome.toAbsolutePath();
       if (optimization != null) c.optimization = optimization;
       if (pgo != null) c.pgo = pgo;
@@ -269,6 +296,12 @@ public class Main implements Callable<Integer> {
     @Option(names = "--rebuild", description = "Compile a fresh artifact even on a cache hit")
     boolean rebuild;
 
+    @Option(
+        names = "--binary",
+        description =
+            "Benchmark image built by your own build tool; runs it without SMH's native build")
+    Path binary;
+
     @Option(names = "--verbose", description = "Show full build logs")
     boolean verbose;
 
@@ -305,7 +338,19 @@ public class Main implements Callable<Integer> {
         config = report.resolve("run.json");
         System.err.println("  Files · " + TerminalDisplay.path(report));
       }
-      BuildConfig c = BuildConfig.read(buildConfig, home);
+      BuildConfig c;
+      if (binary != null) {
+        if (rebuild) throw new IllegalArgumentException("--rebuild does not apply to --binary");
+        if (execution != null && !execution.equals("aot"))
+          throw new IllegalArgumentException("--binary is a native image; execution must be aot");
+        // The build configuration is optional here: it only contributes preparation commands.
+        c =
+            Files.isRegularFile(buildConfig)
+                ? BuildConfig.read(buildConfig, home)
+                : new BuildConfig();
+        c.execution = "aot";
+        if (c.output == null) c.output = binary.toAbsolutePath().normalize().getParent();
+      } else c = BuildConfig.read(buildConfig, home);
       c.verbose = verbose;
       if (javaHome != null) c.javaHome = javaHome.toAbsolutePath();
       if (optimization != null) c.optimization = optimization;
@@ -352,17 +397,35 @@ public class Main implements Callable<Integer> {
           Files.writeString(report.resolve("requested-run.json"), requested.toString());
           Files.writeString(config, effective.toString());
         }
-        if (!c.execution.equals("aot")) {
+        if (binary != null) {
+          BuildCache.Result artifact = RuntimeExecution.external(binary);
+          String status = "External binary · " + artifact.key().substring(9) + " · not rebuilt";
+          TerminalDisplay.buildMessages().println(status);
+          System.err.println("  " + TerminalDisplay.DIM + status + TerminalDisplay.RESET);
+          process = RuntimeExecution.aot(artifact, config);
+        } else if (!c.execution.equals("aot")) {
           if (rebuild)
             throw new IllegalArgumentException("--rebuild currently applies to AOT artifacts only");
           process = RuntimeExecution.prepare(c, config);
         } else {
           TerminalDisplay.buildMessages().println("Checking build inputs…");
+          long started = System.nanoTime();
           BuildCache.Result artifact =
               BuildCache.build(c, rebuild, settings -> builder.build(settings, false));
-          TerminalDisplay.buildMessages()
-              .println(
-                  (artifact.hit() ? "Cache hit · " : "Built · ") + artifact.key().substring(0, 12));
+          String status =
+              String.format(
+                  java.util.Locale.ROOT,
+                  "  %s · %s · %s · %.1f s",
+                  artifact.hit() ? "Cache hit" : "Built",
+                  artifact.key().substring(0, 12),
+                  TerminalDisplay.clean(artifact.reason()),
+                  (System.nanoTime() - started) / 1e9);
+          TerminalDisplay.buildMessages().println(status.strip());
+          System.err.println(
+              "  "
+                  + (artifact.hit() ? TerminalDisplay.GREEN : TerminalDisplay.GOLD)
+                  + status.strip()
+                  + TerminalDisplay.RESET);
           process = RuntimeExecution.aot(artifact, config);
         }
       } finally {

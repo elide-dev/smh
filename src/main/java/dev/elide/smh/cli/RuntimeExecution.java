@@ -23,6 +23,8 @@ final class RuntimeExecution {
     identity.addProperty("hostSha256", BuildCache.hash(artifact.binary()));
     identity.add("runtimeArgs", new JsonArray());
     Path manifest = artifact.binary().getParent().resolve("build.json");
+    // An image without SMH's build manifest beside it was built elsewhere; say so in every row.
+    identity.addProperty("provenance", Files.isRegularFile(manifest) ? "smh-build" : "external");
     if (Files.isRegularFile(manifest)) {
       JsonObject build = JsonParser.parseString(Files.readString(manifest)).getAsJsonObject();
       identity.add("hostBuild", build);
@@ -31,6 +33,18 @@ final class RuntimeExecution {
     }
     process.environment().put("SMH_EXECUTION_IDENTITY", identity.toString());
     return process;
+  }
+
+  /** An executable SMH did not build: identified by content, never by a cache receipt. */
+  static BuildCache.Result external(Path binary) throws Exception {
+    if (!Files.isRegularFile(binary) || !Files.isExecutable(binary))
+      throw new IllegalArgumentException("Benchmark binary is not an executable file: " + binary);
+    Path absolute = binary.toAbsolutePath().normalize();
+    return new BuildCache.Result(
+        absolute,
+        true,
+        "external-" + BuildCache.hash(absolute).substring(0, 12),
+        "external binary");
   }
 
   static ProcessBuilder prepare(BuildConfig c, Path config) throws Exception {

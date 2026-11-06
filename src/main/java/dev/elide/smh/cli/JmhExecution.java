@@ -271,15 +271,17 @@ final class JmhExecution {
                   return artifact;
                 },
                 settings ->
-                    HexFormat.of()
-                        .formatHex(
-                            MessageDigest.getInstance("SHA-256")
-                                .digest(
-                                    (BuildCache.bytecodeFingerprint(settings)
-                                            + trainingIdentity
-                                            + BuildCache.compilerIdentity(List.of(java.toString()))
-                                            + BuildCache.hash(c.home.resolve("smh-jmh.jar")))
-                                        .getBytes(StandardCharsets.UTF_8))));
+                    BuildCache.Fingerprint.of(
+                        HexFormat.of()
+                            .formatHex(
+                                MessageDigest.getInstance("SHA-256")
+                                    .digest(
+                                        (BuildCache.bytecodeFingerprint(settings).key()
+                                                + trainingIdentity
+                                                + BuildCache.compilerIdentity(
+                                                    List.of(java.toString()))
+                                                + BuildCache.hash(c.home.resolve("smh-jmh.jar")))
+                                            .getBytes(StandardCharsets.UTF_8)))));
       } finally {
         c.output = original;
       }

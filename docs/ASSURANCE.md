@@ -576,3 +576,51 @@ The final JVM run passes all 181 tests without skips: 4,402/4,422 production lin
 (99.55%), 2,557/2,581 branches (99.07%), and the entire mathematical kernel
 (151 lines, 68 branches). Lint and all 31 Python tool tests pass. Native evidence
 uses the rebuilt Linux AMD64 CLI with Native Image 25.0.4.1.
+
+## Verdict-first results and explained cache misses (2026-11-06)
+
+Steady-state cards now lead with the median iteration score, its median absolute
+deviation (MAD), the mean (the JMH `score`), and min/p99/count; a MAD above 10%
+of the median is flagged as wide spread. Histograms bin scores up to the 99th
+percentile and count the remainder in the caption; run-order charts still show
+every finite score. Baseline comparisons use medians, show a spread band equal to
+the sum of both runs' relative MADs, mark changes inside the band as `≈`, color
+faster/slower by score direction, and end with a per-case summary verdict. These
+are descriptive statistics of retained observations: the band is not a confidence
+interval, no significance is claimed, and raw JSON is unchanged. The shared-axis
+variant overlay is now limited to startup launch rows; parameterized steady-state
+cases are different workloads and render as separate cards.
+
+The build cache key is now a map of named input digests. Only build-affecting
+environment variables (plus `cacheEnvironment` names) take part; toolchains are
+identified by launcher bytes, `release`/`conf` files, a path/size/timestamp
+manifest of `lib`, and `--version` output rather than by hashing multi-gigabyte
+installations. Misses print the inputs that differ from the newest receipt, and
+each cache keeps its eight newest generations. Limits: a same-size, same-timestamp
+edit inside an installed toolchain is not detected, and undeclared environment
+variables are deliberately ignored.
+
+Evidence: `BuildCacheTest` (allowlist/declared environment, manifest sensitivity,
+miss explanations, pruning), `ResultDetailsTest`, `BenchmarkComparisonTest`, and
+`TerminalDisplayTest`. Locally on the invoice sample (Linux amd64, WSL2): a fresh
+shell session and an unrelated environment variable both produced
+`Cache hit · … · build inputs unchanged · 1.8 s` where the previous key forced a
+50–90 s native rebuild; `CFLAGS=-O1` produced `Built · … · changed: env:CFLAGS`;
+the fingerprint check fell from 3.5–4.5 s to under 2 s; thirteen stale
+generations were pruned to eight. Run-to-run medians of the same binary still
+differed by up to 39% on this host, which the spread band now makes visible; this
+is a presentation change, not a measurement-accuracy qualification.
+
+`smh build --print-flags` exports the javac and native-image contract, and
+`smh bench --binary` runs an externally built image through every benchmark
+path while labeling its provenance as `external` in each row and in the footer.
+`CliTest` and `RuntimeExecutionTest` cover the contract output, the optional build
+configuration, the rejected `--rebuild`/non-AOT combinations, and the provenance
+labels. This establishes the integration contract for Gradle, Maven, and Bazel
+builds; it does not verify that an external build preserved the measurement
+contract, which remains the user's evidence to keep.
+
+After these changes the full JVM run passes all 184 tests without skips:
+4,750/4,774 production lines (99.50%), 2,794/2,818 branches (99.15%), and the
+entire mathematical kernel (151 lines, 68 branches). Lint and all 31 Python tool
+tests pass.

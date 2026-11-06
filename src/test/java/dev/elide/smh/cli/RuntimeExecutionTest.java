@@ -206,13 +206,28 @@ class RuntimeExecutionTest {
                 RuntimeExecution.aot(artifact, config).environment().get("SMH_EXECUTION_IDENTITY"))
             .getAsJsonObject();
     assertEquals("aot", identity.get("backend").getAsString());
+    assertEquals("external", identity.get("provenance").getAsString());
     assertEquals(BuildCache.hash(binary), identity.get("hostSha256").getAsString());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> RuntimeExecution.external(directory.resolve("missing")));
+    if (Files.getFileStore(binary).supportsFileAttributeView("posix")) {
+      Files.setPosixFilePermissions(
+          binary, Set.of(java.nio.file.attribute.PosixFilePermission.OWNER_READ));
+      assertThrows(IllegalArgumentException.class, () -> RuntimeExecution.external(binary));
+    }
+    assertTrue(binary.toFile().setExecutable(true));
+    var external = RuntimeExecution.external(binary);
+    assertTrue(external.hit());
+    assertTrue(external.key().startsWith("external-"));
+    assertEquals("external binary", external.reason());
     Files.writeString(directory.resolve("build.json"), "{\"optimization\":\"3\"}");
     identity =
         JsonParser.parseString(
                 RuntimeExecution.aot(artifact, config).environment().get("SMH_EXECUTION_IDENTITY"))
             .getAsJsonObject();
     assertEquals("3", identity.getAsJsonObject("hostBuild").get("optimization").getAsString());
+    assertEquals("smh-build", identity.get("provenance").getAsString());
     Files.writeString(directory.resolve("build.json"), "{\"pgo\":\"instrument\"}");
     identity =
         JsonParser.parseString(

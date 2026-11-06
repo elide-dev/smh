@@ -246,10 +246,28 @@ final class TerminalDisplay {
   }
 
   static void terminate(Process child) {
+    terminate(child, dev.elide.smh.runtime.Platform.current());
+  }
+
+  static void terminate(Process child, dev.elide.smh.runtime.Platform platform) {
     if (child == null || !child.isAlive()) return;
     // Snapshot the tree first: a destroyed parent can no longer enumerate its descendants.
-    List<ProcessHandle> tree = new ArrayList<>(child.descendants().toList());
-    tree.add(child.toHandle());
+    List<ProcessHandle> tree = child.descendants().toList();
+    if (platform.os() == dev.elide.smh.runtime.Platform.OperatingSystem.WINDOWS) {
+      // ProcessHandle.destroyForcibly does not reliably end Windows descendants; taskkill /T
+      // terminates the whole tree natively. Per-process termination below remains the fallback.
+      try {
+        new ProcessBuilder("taskkill", "/F", "/T", "/PID", Long.toString(child.pid()))
+            .redirectErrorStream(true)
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .start()
+            .onExit()
+            .completeOnTimeout(null, 10, TimeUnit.SECONDS)
+            .join();
+      } catch (IOException e) {
+        // taskkill is unavailable; fall through to per-process termination.
+      }
+    }
     for (ProcessHandle process : tree) process.destroyForcibly();
     // join() never throws on interruption, so cleanup also completes from interrupted threads.
     java.util.concurrent.CompletableFuture.allOf(
@@ -258,14 +276,7 @@ final class TerminalDisplay {
                 .toArray(java.util.concurrent.CompletableFuture[]::new))
         .completeOnTimeout(null, 10, TimeUnit.SECONDS)
         .join();
-    // Windows can report a terminated process as alive for a moment after its exit future
-    // completes; re-check and re-issue termination for anything that survived.
-    for (ProcessHandle process : tree) {
-      if (!process.isAlive()) continue;
-      process.destroyForcibly();
-      process.onExit().completeOnTimeout(null, 2, TimeUnit.SECONDS).join();
-    }
-    child.onExit().completeOnTimeout(null, 2, TimeUnit.SECONDS).join();
+    child.destroyForcibly().onExit().join();
   }
 
   static void restore(Process child, PrintStream err) {

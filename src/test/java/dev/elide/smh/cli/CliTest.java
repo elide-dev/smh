@@ -212,8 +212,19 @@ class CliTest {
             "--profile",
             source.toString());
     assertEquals(0, pgo.status, pgo.stderr);
-    assertTrue(pgo.stdout.contains("--pgo=" + source.toAbsolutePath()), pgo.stdout);
-    assertTrue(pgo.stdout.contains("-Asmh.observer=example.Observer"), pgo.stdout);
+    JsonObject pgoContract = com.google.gson.JsonParser.parseString(pgo.stdout).getAsJsonObject();
+    assertTrue(
+        pgoContract
+            .getAsJsonObject("nativeImage")
+            .getAsJsonArray("flags")
+            .contains(new com.google.gson.JsonPrimitive("--pgo=" + source.toAbsolutePath())),
+        pgo.stdout);
+    assertTrue(
+        pgoContract
+            .getAsJsonObject("javac")
+            .getAsJsonArray("options")
+            .contains(new com.google.gson.JsonPrimitive("-Asmh.observer=example.Observer")),
+        pgo.stdout);
     assertEquals(
         TerminalDisplay.path(
             directory.resolve("original").resolve(Platform.current().executable("benchmarks"))),

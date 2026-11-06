@@ -436,6 +436,19 @@ class TerminalDisplayTest {
 
   @Test
   void terminationReapsDelegatedJvmForks() throws Exception {
+    var current = dev.elide.smh.runtime.Platform.current();
+    reapsDelegatedJvmForks(current);
+    // Exercise the other strategy too: taskkill elsewhere, or per-process destruction on Windows.
+    var windows = current.os() == dev.elide.smh.runtime.Platform.OperatingSystem.WINDOWS;
+    reapsDelegatedJvmForks(
+        new dev.elide.smh.runtime.Platform(
+            windows
+                ? dev.elide.smh.runtime.Platform.OperatingSystem.LINUX
+                : dev.elide.smh.runtime.Platform.OperatingSystem.WINDOWS,
+            current.architecture()));
+  }
+
+  private void reapsDelegatedJvmForks(dev.elide.smh.runtime.Platform platform) throws Exception {
     Path fork =
         Files.writeString(
             directory.resolve("Fork.java"),
@@ -461,7 +474,7 @@ class TerminalDisplayTest {
       long pid = Long.parseLong(parent.inputReader().readLine());
       ProcessHandle descendant = ProcessHandle.of(pid).orElseThrow();
       assertTrue(descendant.isAlive());
-      TerminalDisplay.terminate(parent);
+      TerminalDisplay.terminate(parent, platform);
       assertFalse(parent.isAlive());
       assertFalse(descendant.isAlive());
     } finally {

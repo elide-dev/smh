@@ -28,7 +28,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-      - uses: graalvm/setup-graalvm@f70bc8032f90a104502824a54bcb94b6f01715bc # v1, 2026-11-04
+      - uses: graalvm/setup-graalvm@60e76998d25690099182b796e99b8804da582d90 # v1, 2026-11-04
         with:
           distribution: graalvm
           version: '25.5'
